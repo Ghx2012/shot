@@ -424,7 +424,7 @@
         <div id="damage-direction" class="damage-direction"></div>
         <div id="announcement" class="announcement hidden"><small id="announcement-kicker">ROUND START</small><strong id="announcement-title">行动开始</strong><span id="announcement-subtitle">突破防线，安置量子核心</span></div>
         <div id="bomb-status" class="bomb-status hidden"><span></span> 核心已安置 <strong id="bomb-timer">40.0</strong></div>
-        <div id="online-status" class="online-status hidden"><span class="status-dot"></span><b id="online-room">ROOM</b><small id="online-team-label">守序者</small></div>
+        <div id="online-status" class="online-status hidden"><span class="status-dot"></span><b id="online-room">ROOM</b><small id="online-team-label">守序者</small><i id="online-ping" class="online-ping">--</i></div>
         <div id="gamepad-status" class="gamepad-status hidden">手柄已连接</div>
         <div id="respawn-overlay" class="respawn-overlay hidden"><small>YOU WERE ELIMINATED</small><strong>等待重生</strong><b id="respawn-timer">3.0</b><span id="respawn-killer">正在返回战场</span></div>
 
@@ -508,6 +508,13 @@
                 <button type="button" data-quality="low">流畅</button>
                 <button type="button" data-quality="medium">均衡</button>
                 <button type="button" data-quality="high" class="active">高清</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span><strong>界面语言</strong><small>切换后立即生效</small></span>
+              <div class="setting-choice" id="language-choices">
+                <button type="button" data-lang="zh" class="active">中文</button>
+                <button type="button" data-lang="en">English</button>
               </div>
             </div>
           </div>

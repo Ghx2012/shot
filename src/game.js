@@ -15,6 +15,11 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 const $ = (id) => document.getElementById(id);
 const clamp = THREE.MathUtils.clamp;
 const lerp = THREE.MathUtils.lerp;
+function stickDeadzone(value) {
+  const abs = Math.abs(value || 0);
+  if (abs < 0.16) return 0;
+  return Math.sign(value) * Math.pow((abs - 0.16) / 0.84, 1.35);
+}
 const PATROL_POINTS = [
   [0, 28], [-4, 24], [7, 27], [-4, 14], [6, 12], [-4, 2],
   [12, 0], [-12, 0], [0, -12], [4, -20], [-4, -30], [12, -33],
@@ -533,6 +538,8 @@ export class TacticalGame {
     this.tpDesired = new THREE.Vector3();
     this.tpBack = new THREE.Vector3();
     this.inspectEuler = new THREE.Euler();
+    this.inspectRotation = { x: 0, y: 0, z: 0 };
+    this.gamepadNow = [];
     this.inspectPivot = new THREE.Vector3(0, -0.12, 0.34);
     this.inspectRotated = new THREE.Vector3();
     this.grenadePrev = new THREE.Vector3();
@@ -3214,11 +3221,17 @@ export class TacticalGame {
     rain.frustumCulled = false;
     rain.raycast = () => {};
     this.scene.add(rain);
+    let rainAccum = 0;
     this.environmentAnimations.push((time, dt) => {
+      // 雨丝顶点更新限制在 30Hz：视觉几乎无差别，但可省掉一半 CPU 循环与显存上传
+      rainAccum += dt;
+      if (rainAccum < 1 / 30) return;
+      const step = rainAccum;
+      rainAccum = 0;
       const array = rainGeometry.attributes.position.array;
       for (let i = 0; i < rainCount; i++) {
         const offset = i * 6;
-        const fall = rainSpeeds[i] * dt;
+        const fall = rainSpeeds[i] * step;
         array[offset + 1] -= fall;
         array[offset + 4] -= fall;
         if (array[offset + 4] < 0.05) {
@@ -5993,17 +6006,12 @@ export class TacticalGame {
       }
     }
     this.gamepad.pad = pad;
-    const deadzone = (value) => {
-      const abs = Math.abs(value || 0);
-      if (abs < 0.16) return 0;
-      return Math.sign(value) * Math.pow((abs - 0.16) / 0.84, 1.35);
-    };
     const axes = pad.axes || [];
-    this.gamepad.moveX = deadzone(axes[0]);
-    this.gamepad.moveY = -deadzone(axes[1]);
-    this.gamepad.lookX = deadzone(axes[2]);
-    this.gamepad.lookY = deadzone(axes[3]);
-    const now = [];
+    this.gamepad.moveX = stickDeadzone(axes[0]);
+    this.gamepad.moveY = -stickDeadzone(axes[1]);
+    this.gamepad.lookX = stickDeadzone(axes[2]);
+    this.gamepad.lookY = stickDeadzone(axes[3]);
+    const now = this.gamepadNow;
     for (let i = 0; i < pad.buttons.length; i++) now[i] = !!pad.buttons[i]?.pressed;
     const edge = (index) => !!now[index] && !this.gamepad.prev[index];
     const playing = this.state === 'playing';
@@ -6926,8 +6934,17 @@ export class TacticalGame {
 
   updateTDM(dt) {
     this.roundTime = Math.max(0, this.roundTime - dt);
-    $('round-timer').textContent = this.formatMatchTime(this.roundTime);
-    $('round-timer').style.color = this.roundTime < 30 ? '#ff5d52' : '';
+    // 计时器只在显示的秒数变化时写 DOM，避免每帧触发样式重算
+    const seconds = Math.max(0, Math.ceil(this.roundTime));
+    if (seconds !== this.tdmTimerSeconds) {
+      this.tdmTimerSeconds = seconds;
+      $('round-timer').textContent = this.formatMatchTime(this.roundTime);
+    }
+    const timerLow = this.roundTime < 30;
+    if (timerLow !== this.tdmTimerLow) {
+      this.tdmTimerLow = timerLow;
+      $('round-timer').style.color = timerLow ? '#ff5d52' : '';
+    }
     if (this.player.dead) {
       const remaining = Math.max(0, this.player.respawnAt - this.time);
       $('respawn-timer').textContent = remaining.toFixed(1);
@@ -7538,7 +7555,7 @@ export class TacticalGame {
         const thigh = -0.62 * bend - 0.18 * plant;
         const calf = 1.24 * bend + 0.18 * plant;
         const foot = -0.64 * bend;
-        for (const side of ['l', 'r']) {
+        for (const side of 'lr') {
           const thighBone = avatar.bones[`thigh_${side}`];
           const calfBone = avatar.bones[`calf_${side}`];
           const footBone = avatar.bones[`foot_${side}`];
@@ -8562,7 +8579,7 @@ export class TacticalGame {
     enemy.health -= damage;
     const killed = enemy.health <= 0;
     if (!silent) {
-      this.showHitmarker(killed);
+      this.showHitmarker(killed, headshot);
       this.audio.hit(killed);
     }
     if (killed) {
@@ -8601,12 +8618,16 @@ export class TacticalGame {
     }
   }
 
-  showHitmarker(kill) {
+  showHitmarker(kill, headshot = false) {
     const marker = $('hitmarker');
-    marker.classList.remove('show', 'kill');
-    void marker.offsetWidth;
-    if (kill) marker.classList.add('kill');
+    marker.classList.toggle('kill', !!kill);
+    marker.classList.toggle('headshot', !!headshot && !kill);
     marker.classList.add('show');
+    // 用 Web Animations 重启动画，替代 offsetWidth 强制同步布局
+    marker.getAnimations?.().forEach((animation) => {
+      animation.cancel();
+      animation.play();
+    });
   }
 
   addKillFeed(id, headshot, weaponKey = this.currentWeapon) {
@@ -9138,13 +9159,29 @@ export class TacticalGame {
     // 贴墙检测：CS2 风格，枪口顶到墙面时自动收枪下压
     this.wallCheckTimer -= dt;
     if (this.wallCheckTimer <= 0) {
-      this.wallCheckTimer = 0.06;
-      this.camera.getWorldDirection(this.scratch.h);
-      this.wallRaycaster.set(this.camera.position, this.scratch.h);
-      this.wallRaycaster.far = 0.95;
-      const hits = this.wallRaycaster.intersectObjects(this.solids, false);
-      const wall = hits.find((hit) => hit.face && Math.abs(hit.face.normal.y) < 0.6);
-      this.wallDistance = wall ? wall.distance : Infinity;
+      this.wallCheckTimer = 0.08;
+      // 先用碰撞体 XZ 包围盒粗筛，远离任何墙体时跳过射线检测
+      const px = this.player.position.x;
+      const pz = this.player.position.z;
+      let nearWall = Math.abs(px) > 30.8 || Math.abs(pz) > 36.8;
+      if (!nearWall) {
+        for (const box of this.colliders) {
+          if (px > box.minX - 1 && px < box.maxX + 1 && pz > box.minZ - 1 && pz < box.maxZ + 1) {
+            nearWall = true;
+            break;
+          }
+        }
+      }
+      if (nearWall) {
+        this.camera.getWorldDirection(this.scratch.h);
+        this.wallRaycaster.set(this.camera.position, this.scratch.h);
+        this.wallRaycaster.far = 0.95;
+        const hits = this.wallRaycaster.intersectObjects(this.solids, false);
+        const wall = hits.find((hit) => hit.face && Math.abs(hit.face.normal.y) < 0.6);
+        this.wallDistance = wall ? wall.distance : Infinity;
+      } else {
+        this.wallDistance = Infinity;
+      }
     }
     const wallBlockWeight = this.scoped || this.thirdPerson || planting ? 0 : 1;
     const wallTarget = clamp((0.92 - this.wallDistance) / 0.55, 0, 1) * wallBlockWeight;
@@ -9153,7 +9190,10 @@ export class TacticalGame {
     const switchProgress = this.switchFrom ? clamp((this.time - this.switchStart) / this.switchDuration, 0, 1) : 1;
     const switching = !!this.switchFrom && switchProgress < 1;
     const target = this.scratch.g.copy(base);
-    const inspectRotation = { x: 0, y: 0, z: 0 };
+    const inspectRotation = this.inspectRotation;
+    inspectRotation.x = 0;
+    inspectRotation.y = 0;
+    inspectRotation.z = 0;
     let leftHandRelease = 0;
     let reloadHand = 0;
     let reloadOffsetY = 0;
@@ -9302,7 +9342,10 @@ export class TacticalGame {
     model.rotation.x = lerp(model.rotation.x, (knife ? -0.08 : 0) + inspectRotation.x + switchRotX + this.gunKick.rot + boltArc * 0.3 + pumpArc * 0.12 + this.viewSway.y * 0.00045 - throwArc * 0.3 - drawTuck * 0.55 + wallPush * 0.5, 1 - Math.exp(-dt * 15 * tracking));
     model.rotation.y = lerp(model.rotation.y, (knife ? -0.2 : 0) + inspectRotation.y + switchRotY - this.viewSway.x * 0.00055 - pumpArc * 0.06 + throwArc * 0.12 + strafeSway * 0.025 + wallPush * 0.07, 1 - Math.exp(-dt * 12 * tracking));
     model.rotation.z = lerp(model.rotation.z, (knife ? -0.05 : 0) + inspectRotation.z + switchRotZ + this.gunKick.roll - bobX * 1.2 - this.viewSway.x * 0.00035 + boltArc * 0.35 - pumpArc * 0.2 + throwArc * 0.28 + drawTuck * 0.2 + wallPush * 0.1, 1 - Math.exp(-dt * 10 * tracking));
-    const leftArm = knife ? null : model.children.find((child) => child.name === 'fpsArm-left');
+    if (model.userData.leftArm === undefined) {
+      model.userData.leftArm = model.children.find((child) => child.name === 'fpsArm-left') || null;
+    }
+    const leftArm = knife ? null : model.userData.leftArm;
     if (leftArm) {
       if (!leftArm.userData.inspectRest) {
         leftArm.userData.inspectRest = {
@@ -9436,14 +9479,19 @@ export class TacticalGame {
       enemy.senseTimer -= dt;
       if (enemy.senseTimer <= 0) {
         enemy.senseTimer = 0.12 + Math.random() * 0.08;
-        eye.copy(enemy.group.position);
-        eye.y = 1.65;
-        sightDir.copy(playerHead).sub(eye);
-        const sightDistance = sightDir.length();
-        sightDir.normalize();
-        this.raycaster.set(eye, sightDir);
-        this.raycaster.far = sightDistance;
-        enemy.canSee = sightDistance < 36 && !this.raycaster.intersectObjects(this.solids, false)[0];
+        // 超出感知距离直接判为不可见，省掉一次全场景射线
+        if (distance >= 36) {
+          enemy.canSee = false;
+        } else {
+          eye.copy(enemy.group.position);
+          eye.y = 1.65;
+          sightDir.copy(playerHead).sub(eye);
+          const sightDistance = sightDir.length();
+          sightDir.normalize();
+          this.raycaster.set(eye, sightDir);
+          this.raycaster.far = sightDistance;
+          enemy.canSee = sightDistance < 36 && !this.raycaster.intersectObjects(this.solids, false)[0];
+        }
       }
       const visible = enemy.canSee && distance < 36;
       separation.set(0, 0, 0);
@@ -9598,11 +9646,20 @@ export class TacticalGame {
     }
     const accuracy = clamp(0.68 - distance * 0.011 - this.player.speed * 0.025, 0.16, 0.64);
     const hit = Math.random() < accuracy;
-    const target = this.camera.position.clone();
-    if (!hit) target.add(new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 4));
-    const muzzle = enemy.handBone
-      ? enemy.handBone.getWorldPosition(new THREE.Vector3())
-      : enemy.group.position.clone().add(new THREE.Vector3(0.22, 1.3, 0));
+    // 复用临时向量，避免每次开火分配
+    const target = this.enemyTarget || (this.enemyTarget = new THREE.Vector3());
+    target.copy(this.camera.position);
+    if (!hit) {
+      target.x += (Math.random() - 0.5) * 4;
+      target.y += (Math.random() - 0.5) * 3;
+      target.z += (Math.random() - 0.5) * 4;
+    }
+    const muzzle = this.enemyMuzzle || (this.enemyMuzzle = new THREE.Vector3());
+    if (enemy.handBone) {
+      enemy.handBone.getWorldPosition(muzzle);
+    } else {
+      muzzle.copy(enemy.group.position).add(this.enemyMuzzleOffset || (this.enemyMuzzleOffset = new THREE.Vector3(0.22, 1.3, 0)));
+    }
     this.createTracer(muzzle, target, 0xff694f, 0.09);
     if (hit) this.damagePlayer(8 + Math.random() * 8, enemy.group.position);
   }
@@ -9616,13 +9673,15 @@ export class TacticalGame {
     $('damage-vignette').style.opacity = '0.85';
     setTimeout(() => { $('damage-vignette').style.opacity = this.player.health < 30 ? '0.28' : '0'; }, 130);
     const direction = $('damage-direction');
-    const toSource = source.clone().sub(this.player.position);
+    const toSource = this.damageSource || (this.damageSource = new THREE.Vector3());
+    toSource.copy(source).sub(this.player.position);
     const sourceAngle = Math.atan2(toSource.x, toSource.z);
     direction.style.transform = `translateX(-50%) rotate(${sourceAngle - this.camera.rotation.y}rad)`;
     direction.style.opacity = '1';
     setTimeout(() => { direction.style.opacity = '0'; }, 350);
     toSource.normalize();
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    const right = this.damageRight || (this.damageRight = new THREE.Vector3());
+    right.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
     const lateral = toSource.dot(right);
     const punchPitch = clamp(amount * 0.0011, 0.004, 0.022);
     const punchYaw = clamp(lateral * amount * 0.0007, -0.018, 0.018);
@@ -9982,25 +10041,78 @@ export class TacticalGame {
     setTimeout(() => element.classList.add('hidden'), 3100);
   }
 
+  weaponUIDom() {
+    if (this.weaponUiDom) return this.weaponUiDom;
+    // 每发子弹都会刷新武器 UI，缓存节点避免反复 getElementById/querySelector
+    this.weaponUiDom = {
+      scopeCaption: $('scope-caption-name'),
+      name: $('weapon-name'),
+      mode: $('fire-mode'),
+      heatRow: $('heat-row'),
+      scopeHint: $('scope-hint'),
+      touchScope: document.querySelector('#touch-controls [data-touch="scope"]'),
+      ammo: $('ammo-value'),
+      reserve: $('reserve-value'),
+      ammoSep: document.querySelector('.ammo > span'),
+      ticks: $('ammo-ticks'),
+      last: { name: '', mode: '', ammo: '', reserve: '', caption: '', low: null, sep: null, scopeHint: null, touchScope: null },
+    };
+    return this.weaponUiDom;
+  }
+
   updateWeaponUI() {
     const weapon = this.weaponConfigs[this.currentWeapon];
-    const scopeCaption = $('scope-caption-name');
-    if (scopeCaption) scopeCaption.textContent = `${weapon.name} · ${weapon.scopeZoom || '1×'}`;
-    $('weapon-name').textContent = this.reloading ? '换弹中…' : weapon.name;
-    $('fire-mode').textContent = weapon.overheated
+    const ui = this.weaponUIDom();
+    const last = ui.last;
+    const caption = `${weapon.name} · ${weapon.scopeZoom || '1×'}`;
+    if (ui.scopeCaption && caption !== last.caption) {
+      ui.scopeCaption.textContent = caption;
+      last.caption = caption;
+    }
+    const name = this.reloading ? '换弹中…' : weapon.name;
+    if (name !== last.name) {
+      ui.name.textContent = name;
+      last.name = name;
+    }
+    const mode = weapon.overheated
       ? '枪管过热 · 冷却中'
       : this.inspecting ? '检视武器' : this.scoped && weapon.scoped ? `开镜 · ${weapon.scopeZoom || '瞄准'}` : weapon.mode;
-    const heatRow = $('heat-row');
-    if (heatRow) this.updateWeaponHeat(0);
-    $('scope-hint').classList.toggle('hidden', !weapon.scoped);
-    const touchScope = document.querySelector('#touch-controls [data-touch="scope"]');
-    if (touchScope) touchScope.classList.toggle('hidden', !weapon.scoped);
+    if (mode !== last.mode) {
+      ui.mode.textContent = mode;
+      last.mode = mode;
+    }
+    if (ui.heatRow) this.updateWeaponHeat(0);
+    const scoped = !!weapon.scoped;
+    if (scoped !== last.scopeHint) {
+      ui.scopeHint.classList.toggle('hidden', !scoped);
+      last.scopeHint = scoped;
+    }
+    if (ui.touchScope && scoped !== last.touchScope) {
+      ui.touchScope.classList.toggle('hidden', !scoped);
+      last.touchScope = scoped;
+    }
     const unlimited = this.unlimitedAmmo && !weapon.melee;
-    $('ammo-value').textContent = weapon.melee ? '—' : unlimited ? '∞' : String(weapon.ammo).padStart(2, '0');
-    $('ammo-value').classList.toggle('low', !weapon.melee && !unlimited && weapon.ammo <= Math.max(1, Math.floor(weapon.magSize * 0.2)));
-    $('reserve-value').textContent = weapon.melee ? '近战' : unlimited ? '∞' : weapon.reserve;
-    document.querySelector('.ammo > span').style.visibility = weapon.melee ? 'hidden' : 'visible';
-    const ticks = $('ammo-ticks');
+    const ammoText = weapon.melee ? '—' : unlimited ? '∞' : String(weapon.ammo).padStart(2, '0');
+    if (ammoText !== last.ammo) {
+      ui.ammo.textContent = ammoText;
+      last.ammo = ammoText;
+    }
+    const low = !weapon.melee && !unlimited && weapon.ammo <= Math.max(1, Math.floor(weapon.magSize * 0.2));
+    if (low !== last.low) {
+      ui.ammo.classList.toggle('low', low);
+      last.low = low;
+    }
+    const reserveText = weapon.melee ? '近战' : unlimited ? '∞' : String(weapon.reserve);
+    if (reserveText !== last.reserve) {
+      ui.reserve.textContent = reserveText;
+      last.reserve = reserveText;
+    }
+    const sepHidden = !!weapon.melee;
+    if (sepHidden !== last.sep) {
+      ui.ammoSep.style.visibility = sepHidden ? 'hidden' : 'visible';
+      last.sep = sepHidden;
+    }
+    const ticks = ui.ticks;
     if (ticks.dataset.mag !== String(weapon.magSize)) {
       ticks.dataset.mag = String(weapon.magSize);
       ticks.innerHTML = '';
@@ -10221,7 +10333,7 @@ export class TacticalGame {
     const rawDt = this.clock.getDelta();
     if (document.hidden) return;
     // 登录页覆盖全屏时暂停 3D 渲染，减少手机发热与耗电
-    if (!$('login-screen').classList.contains('hidden')) return;
+    if (!(this.loginScreen || (this.loginScreen = $('login-screen'))).classList.contains('hidden')) return;
     if (this.state !== 'playing') {
       this.idleFrameAccum += rawDt;
       const idleInterval = this.touchMode ? 1 / 20 : 1 / 30;

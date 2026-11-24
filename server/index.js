@@ -106,6 +106,49 @@ const rooms = new Map();
 const sockets = new Map();
 const presence = new Map();
 const tokens = new Map();
+// 登录令牌落盘，保证服务端重启后客户端仍能自动登录
+const dataDir = process.env.ZP_DATA_DIR || path.join(__dirname, 'data');
+const tokenFile = path.join(dataDir, 'tokens.json');
+let tokenSaveTimer = null;
+
+function loadTokens() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(tokenFile, 'utf8'));
+    for (const [token, session] of Object.entries(raw?.tokens || {})) {
+      const accountId = String(session?.accountId || '');
+      const issuedAt = Number(session?.issuedAt);
+      if (accountId && Number.isFinite(issuedAt)) tokens.set(token, { accountId, issuedAt });
+    }
+  } catch {
+    // 首次运行或文件损坏时从空令牌表开始
+  }
+}
+
+function writeTokens() {
+  tokenSaveTimer = null;
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    const payload = JSON.stringify({ tokens: Object.fromEntries(tokens) });
+    const temp = `${tokenFile}.tmp`;
+    fs.writeFileSync(temp, payload, { mode: 0o600 });
+    fs.renameSync(temp, tokenFile);
+  } catch (error) {
+    console.error('[auth] 保存登录令牌失败:', error.message);
+  }
+}
+
+function saveTokens() {
+  if (tokenSaveTimer) return;
+  tokenSaveTimer = setTimeout(writeTokens, 200);
+}
+
+function flushTokens() {
+  if (tokenSaveTimer) clearTimeout(tokenSaveTimer);
+  writeTokens();
+}
+
+loadTokens();
+process.on('exit', flushTokens);
 const duelQueue = [];
 let nextPlayerId = 1;
 
@@ -253,9 +296,14 @@ function sendAdminState(ws) {
 }
 
 function invalidateTokens(accountId) {
+  let changed = false;
   for (const [token, session] of tokens) {
-    if (session.accountId === accountId) tokens.delete(token);
+    if (session.accountId === accountId) {
+      tokens.delete(token);
+      changed = true;
+    }
   }
+  if (changed) saveTokens();
 }
 
 function kickAccount(accountId, reason) {
@@ -420,6 +468,7 @@ function issueToken(account) {
   }
   const token = crypto.randomBytes(24).toString('hex');
   tokens.set(token, { accountId: account.id, issuedAt: Date.now() });
+  saveTokens();
   return token;
 }
 
@@ -630,7 +679,7 @@ wss.on('connection', (ws, req) => {
   const id = `p${nextPlayerId++}`;
   const client = {
     id, ws, room: null, name: '干员', accountId: null, ip, ua,
-    lastMessage: 0, messageCount: 0, authAttempts: 0, lastAuthAt: 0,
+    lastMessage: Date.now(), messageCount: 0, authAttempts: 0, lastAuthAt: 0,
   };
   sockets.set(id, client);
   send(ws, { type: 'welcome', id, rooms: roomList(), requireAuth: true });
@@ -650,6 +699,12 @@ wss.on('connection', (ws, req) => {
       return;
     }
     if (!message || typeof message.type !== 'string') return;
+
+    // 心跳：客户端定时 ping，服务端回 pong，用于测量延迟并清理幽灵连接
+    if (message.type === 'ping') {
+      send(ws, { type: 'pong', t: message.t });
+      return;
+    }
 
     /* ---------- 账号 ---------- */
     if (message.type === 'register' || message.type === 'login') {
@@ -769,9 +824,7 @@ wss.on('connection', (ws, req) => {
       const friends = account.friends.slice();
       if (client.room) leaveRoom(client);
       removeFromQueue(client.accountId);
-      for (const [token, session] of tokens) {
-        if (session.accountId === account.id) tokens.delete(token);
-      }
+      invalidateTokens(account.id);
       if (presence.get(client.accountId) === client) presence.delete(client.accountId);
       client.accountId = null;
       client.name = '干员';
@@ -1253,6 +1306,19 @@ setInterval(() => {
 }, 66);
 
 setInterval(() => {
+  // 45 秒没有任何上行数据的连接视为断网/幽灵连接，主动断开以释放房间席位
+  const now = Date.now();
+  for (const client of sockets.values()) {
+    if (now - client.lastMessage < 45000) continue;
+    try {
+      client.ws.terminate();
+    } catch {
+      // 忽略已关闭的连接
+    }
+  }
+}, 10000);
+
+setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) {
     if (!room.invite || room.status !== 'lobby') continue;
@@ -1274,9 +1340,14 @@ setInterval(() => {
     }
   }
   const tokenCutoff = now - 30 * 24 * 60 * 60 * 1000;
+  let expired = false;
   for (const [token, session] of tokens) {
-    if (session.issuedAt < tokenCutoff) tokens.delete(token);
+    if (session.issuedAt < tokenCutoff) {
+      tokens.delete(token);
+      expired = true;
+    }
   }
+  if (expired) saveTokens();
 }, 5000);
 
 setInterval(() => {

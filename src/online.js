@@ -18,6 +18,8 @@ export class LobbyClient {
     this.connected = false;
     this.handlers = new Map();
     this.manualClose = false;
+    this.pingTimer = null;
+    this.latency = null;
   }
 
   on(event, handler) {
@@ -41,6 +43,11 @@ export class LobbyClient {
     }
     this.ws.addEventListener('open', () => {
       this.connected = true;
+      if (this.pingTimer) clearInterval(this.pingTimer);
+      // 心跳既用于测量延迟，也避免服务端把空闲连接当成幽灵连接
+      this.pingTimer = setInterval(() => {
+        this.send('ping', { t: Date.now() });
+      }, 4000);
       this.emit('open');
     });
     this.ws.addEventListener('message', (event) => {
@@ -51,6 +58,14 @@ export class LobbyClient {
         return;
       }
       if (!message || typeof message.type !== 'string') return;
+      if (message.type === 'pong') {
+        const sentAt = Number(message.t);
+        if (Number.isFinite(sentAt)) {
+          this.latency = Math.max(0, Date.now() - sentAt);
+          this.emit('latency', this.latency);
+        }
+        return;
+      }
       if (message.type === 'welcome') this.id = message.id;
       if (message.type === 'joined') {
         this.room = message.room;
@@ -61,8 +76,11 @@ export class LobbyClient {
       this.emit(message.type, message);
     });
     this.ws.addEventListener('close', () => {
+      if (this.pingTimer) clearInterval(this.pingTimer);
+      this.pingTimer = null;
       this.connected = false;
       this.room = null;
+      this.latency = null;
       this.emit('close');
     });
     this.ws.addEventListener('error', () => {

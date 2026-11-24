@@ -1,5 +1,8 @@
 import './style.css';
 import { LobbyClient } from './online.js';
+import { initI18n, setLang, syncLangButtons } from './i18n.js';
+
+initI18n();
 
 const $ = (id) => document.getElementById(id);
 const isTouchDevice = matchMedia('(pointer: coarse)').matches && matchMedia('(hover: none)').matches;
@@ -136,6 +139,13 @@ document.querySelectorAll('[data-quality]').forEach((button) => {
     saveSettings();
   });
 });
+document.querySelectorAll('[data-lang]').forEach((button) => {
+  button.addEventListener('click', () => {
+    setLang(button.dataset.lang);
+    syncLangButtons();
+  });
+});
+syncLangButtons();
 addEventListener('keydown', (event) => {
   if (event.code === 'Escape' && !$('settings-modal').classList.contains('hidden')) closeSettings();
 });
@@ -444,23 +454,42 @@ function connectLobby() {
   lobby.connect(nickname());
 }
 
+let connectWaiters = null;
+let connectWaitTimer = null;
+
 function whenConnected(action) {
   if (lobby.connected) {
     action();
     return;
   }
   connectLobby();
-  let tries = 0;
-  const timer = setInterval(() => {
-    tries++;
-    if (lobby.connected) {
-      clearInterval(timer);
-      action();
-    } else if (tries > 50) {
-      clearInterval(timer);
-      lobbyMessage('连接超时：请先运行 npm run server');
-    }
-  }, 100);
+  // 只保留一个轮询定时器，连点按钮时排队执行，避免重复建房/入房
+  if (!connectWaiters) {
+    connectWaiters = [];
+    let tries = 0;
+    connectWaitTimer = setInterval(() => {
+      tries++;
+      if (lobby.connected) {
+        clearInterval(connectWaitTimer);
+        connectWaitTimer = null;
+        const queue = connectWaiters;
+        connectWaiters = null;
+        queue.forEach((handler) => handler());
+      } else if (tries > 50) {
+        clearInterval(connectWaitTimer);
+        connectWaitTimer = null;
+        connectWaiters = null;
+        lobbyMessage('连接超时：请先运行 npm run server');
+      }
+    }, 100);
+  }
+  connectWaiters.push(action);
+}
+
+function cancelConnectWaiters() {
+  if (connectWaitTimer) clearInterval(connectWaitTimer);
+  connectWaitTimer = null;
+  connectWaiters = null;
 }
 
 function createRoom() {
@@ -503,6 +532,7 @@ lobby.on('open', () => {
 });
 lobby.on('close', () => {
   setLobbyStatus('连接断开');
+  cancelConnectWaiters();
   lobbyRoom = null;
   renderLobby();
   accountState.queued = false;
@@ -518,6 +548,14 @@ lobby.on('close', () => {
   if (accountState.profile) toast('与作战服务器的连接已断开，正在重连', 'error');
   scheduleReconnect();
 });
+lobby.on('latency', (ms) => {
+  const el = document.getElementById('online-ping');
+  if (!el) return;
+  el.textContent = `${ms} ms`;
+  el.classList.toggle('warn', ms >= 90 && ms < 160);
+  el.classList.toggle('bad', ms >= 160);
+});
+
 lobby.on('error', (message) => {
   if (lobby.connected) {
     toast(message.message || '操作失败', 'error');
