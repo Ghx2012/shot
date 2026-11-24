@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#080b0d" />
+    <meta name="description" content="ZERO PROTOCOL — 高画质浏览器战术射击游戏" />
+    <title>ZERO PROTOCOL // 零界协议</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+      <div class="screen-noise"></div>
+      <div id="damage-vignette"></div>
+      <div id="flash-overlay"></div>
+
+      <section id="login-screen" class="login-layer">
+        <div class="login-visual">
+          <div class="login-brand">
+            <span class="brand-mark"><i></i><i></i><i></i></span>
+            <div><strong>ZERO PROTOCOL</strong><small>零 界 协 议 / OPERATIVE NETWORK</small></div>
+          </div>
+          <div class="login-headline">
+            <div class="eyebrow"><span></span> SECURE ACCESS TERMINAL</div>
+            <h1>接入你的<br /><em>作战身份</em></h1>
+            <p>登录后进入黑潮工业港，记录每一场战绩，添加战友并随时发起 1V1 单挑。</p>
+          </div>
+          <div class="login-features">
+            <div><b>01</b><span>个人主页</span><small>战绩 / 胜率 / 历史对局</small></div>
+            <div><b>02</b><span>好友系统</span><small>在线状态 / 添加 / 邀请</small></div>
+            <div><b>03</b><span>1V1 单挑</span><small>快速匹配 / 好友挑战</small></div>
+          </div>
+          <div class="login-foot">KUROTIDE FACILITY · SECTOR 07 · SECURE CHANNEL</div>
+        </div>
+        <div class="login-card">
+          <div class="login-card-head">
+            <div class="eyebrow"><span></span> OPERATIVE ACCESS</div>
+            <h2>作战终端登录</h2>
+            <p>使用作战账号接入，或注册新的干员身份。</p>
+          </div>
+          <div class="auth-tabs" role="tablist">
+            <button type="button" class="auth-tab active" data-auth-tab="login">登录</button>
+            <button type="button" class="auth-tab" data-auth-tab="register">注册账号</button>
+          </div>
+          <form id="auth-form" autocomplete="on">
+            <label class="auth-field"><span>作战账号</span><input id="auth-username" name="username" maxlength="16" autocomplete="username" placeholder="2-16 位账号" /></label>
+            <label class="auth-field"><span>接入密码</span><input id="auth-password" name="password" type="password" maxlength="64" autocomplete="current-password" placeholder="至少 6 位" /></label>
+            <p id="auth-error" class="auth-error"></p>
+            <button id="auth-submit" class="deploy-button" type="submit"><span>登录并进入</span><small>ACCESS</small></button>
+          </form>
+          <button id="auth-retry" class="secondary-button hidden" type="button">重新连接服务器</button>
+          <div id="auth-status" class="auth-status">正在连接作战服务器…</div>
+          <div class="auth-hint">账号数据保存在作战服务器，用于好友、个人主页与 1V1 单挑。</div>
+        </div>
+      </section>
+
+      <section id="main-menu" class="menu-layer hidden">
+        <header class="menu-header">
+          <a class="brand" href="#" aria-label="零界协议首页">
+            <span class="brand-mark"><i></i><i></i><i></i></span>
+            <span class="brand-copy"><strong>ZERO PROTOCOL</strong><small>零 界 协 议</small></span>
+          </a>
+          <nav class="main-nav" aria-label="主菜单">
+            <button class="nav-item active">作战终端</button>
+            <button class="nav-item" id="open-loadout">武器配置</button>
+            <button class="nav-item" id="open-guide">行动指南</button>
+            <button class="nav-item" id="open-profile">个人主页</button>
+            <button class="nav-item" id="open-settings">设置</button>
+          </nav>
+          <button class="profile-chip" id="profile-chip" type="button" aria-label="打开个人主页">
+            <span class="status-dot"></span>
+            <span><small id="profile-rank">特勤干员</small><strong id="profile-name">未登录</strong></span>
+            <b id="profile-avatar">01</b>
+          </button>
+        </header>
+
+        <div class="menu-content">
+          <div class="hero-copy">
+            <div class="eyebrow"><span></span> TACTICAL FPS / BUILD 01</div>
+            <h1>突破边界<br /><em>终结协议</em></h1>
+            <p>潜入黑潮工业设施，突破敌方防线并引爆量子核心。<br />每一次压枪、每一个脚步，都将决定行动结局。</p>
+            <div class="mode-selector" role="group" aria-label="模式选择">
+              <button class="mode-card active" data-mode="bomb">
+                <span class="mode-icon"><svg viewBox="0 0 40 40" fill="none"><path d="M20 3 35 11.5v17L20 37 5 28.5v-17L20 3Z" stroke="currentColor" stroke-width="1.5"/><path d="M13 25V15h7l4 4-4 4h-7M20 19h8" stroke="currentColor" stroke-width="2"/></svg></span>
+                <span class="mode-copy"><small>爆破训练</small><strong>核心爆破</strong><em>单机 · 5 名 AI</em></span>
+                <b>01</b>
+              </button>
+              <button class="mode-card" data-mode="brawl">
+                <span class="mode-icon"><svg viewBox="0 0 40 40" fill="none"><path d="M22 3 10 22h9l-3 15 14-21h-9l1-13Z" stroke="currentColor" stroke-width="1.6"/></svg></span>
+                <span class="mode-copy"><small>无限乱斗</small><strong>团队死斗</strong><em>4 名敌人 · 随机刷新</em></span>
+                <b>02</b>
+              </button>
+              <button class="mode-card" data-mode="online">
+                <span class="mode-icon"><svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="5" stroke="currentColor" stroke-width="1.6"/><path d="M8 20h7M25 20h7M20 8v7M20 25v7M11.5 11.5l5 5M23.5 23.5l5 5M28.5 11.5l-5 5M16.5 23.5l-5 5" stroke="currentColor" stroke-width="1.6"/></svg></span>
+                <span class="mode-copy"><small>5V5 联机</small><strong>在线对战</strong><em>房间大厅 · 实时同步</em></span>
+                <b>03</b>
+              </button>
+              <button class="mode-card" data-mode="duel">
+                <span class="mode-icon"><svg viewBox="0 0 40 40" fill="none"><path d="m8 32 7-7M14 12l8 8M26 28l6 6M32 8l-9 9M9 23l8-8M25 10l6 6" stroke="currentColor" stroke-width="1.7"/><path d="m10 30 5-5M28 8l4-4 4 4-4 4-4-4ZM8 28l4 4-4 4-4-4 4-4Z" stroke="currentColor" stroke-width="1.3"/></svg></span>
+                <span class="mode-copy"><small>1V1 单挑</small><strong>决斗竞技</strong><em>快速匹配 · 邀请码建房</em></span>
+                <b>04</b>
+              </button>
+            </div>
+            <button id="deploy-button" class="deploy-button">
+              <span>开始行动</span><small>DEPLOY</small>
+              <svg viewBox="0 0 24 24" fill="none"><path d="m9 5 7 7-7 7" stroke="currentColor" stroke-width="2"/></svg>
+            </button>
+            <div class="menu-footnote"><span class="status-dot"></span> <span id="menu-status-text">本地作战环境已就绪</span> <i></i> 建议佩戴耳机</div>
+          </div>
+
+          <aside class="operative-panel">
+            <div class="operative-top"><span>ACTIVE OPERATIVE</span><b>突击 / 突破</b></div>
+            <div class="operative-visual">
+              <div class="operative-rings"><i></i><i></i><i></i></div>
+              <svg class="operative-silhouette operative-male" viewBox="0 0 300 440" fill="none" aria-hidden="true">
+                <defs>
+                  <linearGradient id="opArmor" x1="84" y1="60" x2="220" y2="420" gradientUnits="userSpaceOnUse"><stop stop-color="#5c6c70"/><stop offset=".38" stop-color="#2c383c"/><stop offset=".74" stop-color="#141c1e"/><stop offset="1" stop-color="#080d0e"/></linearGradient>
+                  <linearGradient id="opArmorLight" x1="90" y1="120" x2="210" y2="390" gradientUnits="userSpaceOnUse"><stop stop-color="#728387"/><stop offset=".5" stop-color="#334144"/><stop offset="1" stop-color="#151f21"/></linearGradient>
+                  <linearGradient id="opCloth" x1="120" y1="120" x2="180" y2="410" gradientUnits="userSpaceOnUse"><stop stop-color="#232d2f"/><stop offset=".55" stop-color="#121a1b"/><stop offset="1" stop-color="#080d0e"/></linearGradient>
+                  <linearGradient id="opVisor" x1="132" y1="62" x2="168" y2="80" gradientUnits="userSpaceOnUse"><stop stop-color="#f0ffb8"/><stop offset=".45" stop-color="#c8ff52"/><stop offset="1" stop-color="#739c22"/></linearGradient>
+                  <linearGradient id="opLime" x1="120" y1="220" x2="180" y2="260" gradientUnits="userSpaceOnUse"><stop stop-color="#e2ff9c"/><stop offset="1" stop-color="#a8d93e"/></linearGradient>
+                  <linearGradient id="opRim" x1="84" y1="70" x2="120" y2="380" gradientUnits="userSpaceOnUse"><stop stop-color="#b7fff4" stop-opacity=".9"/><stop offset=".55" stop-color="#7de6d8" stop-opacity=".35"/><stop offset="1" stop-color="#7de6d8" stop-opacity="0"/></linearGradient>
+                  <radialGradient id="opFloor"><stop stop-color="#c8ff52" stop-opacity=".55"/><stop offset="1" stop-color="#c8ff52" stop-opacity="0"/></radialGradient>
+                  <filter id="opGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                </defs>
+
+                <ellipse cx="150" cy="417" rx="84" ry="13" fill="url(#opFloor)"/>
+                <g class="hero-cape">
+                  <path d="M208 132 C232 166 240 232 238 292 C236 338 224 376 204 404 C210 360 206 318 198 276 C192 236 196 176 200 144Z" fill="url(#opCloth)" stroke="#0b1112" stroke-width="2"/>
+                  <path d="M236 292 C232 336 222 372 206 398" stroke="url(#opRim)" stroke-width="2" opacity=".5"/>
+                  <path d="M212 160 C226 206 228 260 222 310M216 168 C230 212 232 258 226 300" stroke="#3c4b4e" opacity=".45"/>
+                  <path d="M200 148 C218 182 224 230 222 276" stroke="#c8ff52" opacity=".18"/>
+                </g>
+                <g class="hero-legs">
+                <g id="opLeg">
+                  <path d="M124 236 150 236 147 294 141 330 146 398 148 414 116 414 113 330 118 294Z" fill="url(#opCloth)" stroke="#080d0e" stroke-width="2"/>
+                  <path d="M118 256 149 254 146 306 120 306Z" fill="url(#opArmor)" stroke="#46565a" stroke-width="1.4"/>
+                  <path d="M119 306 146 306 144 338 121 338Z" fill="url(#opArmorLight)" stroke="#5b6c70" stroke-width="1.4"/>
+                  <path d="M122 338 144 338 146 396 120 396Z" fill="url(#opCloth)" stroke="#364447" stroke-width="1.2"/>
+                  <path d="M125 342 142 342 143 392 124 392Z" fill="url(#opArmorLight)" stroke="#46565a"/>
+                  <path d="M113 396 146 396 152 416 110 416Z" fill="#0a1011" stroke="#3e4d50" stroke-width="1.4"/>
+                  <path d="M112 276 122 274 126 296 116 298Z" fill="#131b1d" stroke="#3c4b4e"/>
+                  <circle cx="119" cy="284" r="1.8" fill="#c8ff52" opacity=".8"/>
+                  <path d="M121 314 144 314M124 350 142 350" stroke="#c8ff52" opacity=".45"/>
+                </g>
+                <use href="#opLeg" transform="translate(300 0) scale(-1 1)"/>
+                </g>
+
+                <g class="hero-upper">
+                <path d="M108 126 192 126 184 198 174 236 126 236 116 198Z" fill="url(#opCloth)" stroke="#080d0e" stroke-width="2"/>
+                <path d="M112 126 188 126 180 192 168 218 132 218 120 192Z" fill="url(#opArmor)" stroke="#4c5d61" stroke-width="1.5"/>
+                <path d="M150 127 150 212" stroke="#080d0e" stroke-width="2"/>
+                <path d="M120 138 148 132 148 160 124 168Z" fill="url(#opArmorLight)" stroke="#435256"/>
+                <path d="M180 138 152 132 152 160 176 168Z" fill="url(#opArmorLight)" stroke="#435256"/>
+                <path d="M122 172 148 164 148 186 126 194Z" fill="url(#opArmorLight)" stroke="#3b4a4e"/>
+                <path d="M178 172 152 164 152 186 174 194Z" fill="url(#opArmorLight)" stroke="#3b4a4e"/>
+                <path d="M127 128 120 198 132 202 139 134Z" fill="#151e20" stroke="#3c4b4e"/>
+                <path d="M173 128 180 198 168 202 161 134Z" fill="#151e20" stroke="#3c4b4e"/>
+                <path d="M145 148 155 148 152 160 148 160Z" fill="url(#opLime)" filter="url(#opGlow)" class="visor-glow"/>
+                <path d="M120 214 180 214 184 240 116 240Z" fill="#0f1617" stroke="#3c4b4e"/>
+                <rect x="143" y="218" width="14" height="16" rx="2" fill="url(#opLime)" opacity=".9"/>
+                <rect x="124" y="220" width="14" height="12" rx="2" fill="#1b2628" stroke="#46565a"/>
+                <rect x="162" y="220" width="14" height="12" rx="2" fill="#1b2628" stroke="#46565a"/>
+                <path d="M113 236 127 236 120 300 98 338 89 306Z" fill="url(#opCloth)" stroke="#0b1112"/>
+                <path d="M187 236 173 236 180 300 202 338 211 306Z" fill="url(#opCloth)" stroke="#0b1112"/>
+                <path d="M110 244 122 244 117 294 104 320Z" fill="#1a2325" opacity=".85"/>
+                <path d="M190 244 178 244 183 294 196 320Z" fill="#1a2325" opacity=".85"/>
+                <path d="M94 302 100 336M206 302 200 336" stroke="#c8ff52" opacity=".35"/>
+                <path d="M116 240 120 300M184 240 180 300" stroke="#46565a" opacity=".55"/>
+
+                <path d="M104 132 86 152 88 208 102 226 112 216 106 178 118 150Z" fill="url(#opArmorLight)" stroke="#080d0e" stroke-width="2"/>
+                <path d="M84 148 112 140 122 162 96 176Z" fill="url(#opArmor)" stroke="#4c5d61"/>
+                <path d="M84 150 112 142" stroke="#c8ff52" opacity=".7"/>
+                <path d="M90 204 104 198 138 276 124 290Z" fill="url(#opArmorLight)" stroke="#435256" stroke-width="1.5"/>
+                <path d="M94 210 106 206" stroke="#c8ff52" opacity=".45"/>
+
+                <path d="M196 132 214 152 212 208 198 226 188 216 194 178 182 150Z" fill="url(#opArmorLight)" stroke="#080d0e" stroke-width="2"/>
+                <path d="M216 148 188 140 178 162 204 176Z" fill="url(#opArmor)" stroke="#4c5d61"/>
+                <path d="M216 150 188 142" stroke="#c8ff52" opacity=".7"/>
+                <path d="M210 204 196 198 198 244 212 248Z" fill="url(#opArmorLight)" stroke="#435256" stroke-width="1.5"/>
+                <path d="M210 210 198 206" stroke="#c8ff52" opacity=".45"/>
+
+                <g transform="rotate(-16 160 262)">
+                  <path d="M78 256 108 254 118 246 130 248 130 276 116 278 108 270 80 274Z" fill="#0d1415" stroke="#415154" stroke-width="1.5"/>
+                  <rect x="106" y="250" width="72" height="28" rx="3" fill="url(#opArmor)" stroke="#4c5d61" stroke-width="1.4"/>
+                  <rect x="182" y="252" width="46" height="20" rx="3" fill="#182123" stroke="#46565a"/>
+                  <path d="M228 256 258 256 264 260 258 265 228 265Z" fill="#0c1314" stroke="#3e4d50"/>
+                  <path d="M148 278 166 278 172 306 150 308Z" fill="#141c1e" stroke="#46565a"/>
+                  <path d="M126 274 138 278 130 302 118 298Z" fill="#151d1f" stroke="#46565a"/>
+                  <path d="M160 250 184 250 186 240 162 240Z" fill="#222d30" stroke="#4c5d61"/>
+                  <rect x="164" y="230" width="30" height="12" rx="3" fill="#0f1617" stroke="#4c5d61"/>
+                  <rect x="169" y="233" width="20" height="5" rx="1" fill="url(#opVisor)" class="visor-glow"/>
+                  <path d="M112 260 180 260M194 258 226 258" stroke="#c8ff52" opacity=".45"/>
+                  <path d="M88 264 106 264" stroke="#c8ff52" opacity=".25"/>
+                  <path d="M202 254 232 254" stroke="#6f8084" opacity=".5"/>
+                </g>
+                <path d="M120 280 138 274 146 292 128 300Z" fill="#263538" stroke="#71858a" stroke-width="1.3"/>
+                <path d="M126 282 140 278" stroke="#c8ff52" opacity=".8"/>
+                <path d="M128 285 133 283M132 289 137 287M136 292 140 290" stroke="#0b1112" opacity=".6"/>
+                <path d="M190 236 208 232 216 250 198 256Z" fill="#263538" stroke="#71858a" stroke-width="1.3"/>
+                <path d="M195 239 208 236" stroke="#c8ff52" opacity=".8"/>
+                <path d="M199 242 204 240M202 246 207 244M205 250 210 248" stroke="#0b1112" opacity=".6"/>
+                <path d="M180 260 200 252 206 264 186 270Z" fill="#1b272a" stroke="#5b6d70" stroke-width="1.2"/>
+
+                <path d="M136 94 164 94 167 124 133 124Z" fill="#1a2325"/>
+                <path d="M124 111 176 111 181 131 119 131Z" fill="url(#opArmorLight)" stroke="#4c5d61" stroke-width="1.4"/>
+                <g class="hero-head">
+                <path d="M130 52 139 38 162 37 171 48 174 74 167 93 150 101 133 92 127 72Z" fill="url(#opArmor)" stroke="#56686c" stroke-width="2"/>
+                <path d="M132 52 140 40 160 39 155 49 137 55Z" fill="#687a7d" opacity=".55"/>
+                <path d="M132 60 169 58 167 79 135 81Z" fill="#070c0d" stroke="#546569" stroke-width="1.4"/>
+                <path d="M136 64 165 62 163 76 138 78Z" fill="url(#opVisor)" filter="url(#opGlow)" class="visor-glow"/>
+                <path d="M140 67 161 65" stroke="#f5ffd6" stroke-width="1.2" opacity=".75"/>
+                <path d="M135 81 166 79 162 96 150 100 138 96Z" fill="#0c1314" stroke="#3c4b4e" stroke-width="1.2"/>
+                <path d="M141 86 159 85M140 90 157 89" stroke="#39484b"/>
+                <path d="M122 60 130 60 132 80 123 82Z" fill="url(#opArmorLight)" stroke="#4c5d61"/>
+                <path d="M178 60 170 60 168 80 177 82Z" fill="url(#opArmorLight)" stroke="#4c5d61"/>
+                <path d="M125 64 129 64 130 77 126 77Z" fill="#c8ff52" opacity=".5"/>
+                <path d="M175 64 171 64 170 77 174 77Z" fill="#c8ff52" opacity=".5"/>
+                <path d="M174 50 182 46 186 70 178 74Z" fill="#1a2325" stroke="#4c5d61" stroke-width="1.2"/>
+                <path d="M181 44 186 42 189 58 184 60Z" fill="url(#opLime)" filter="url(#opGlow)" class="visor-glow"/>
+                </g>
+                </g>
+
+                <path d="M130 52 127 72 133 92 140 98" stroke="url(#opRim)" stroke-width="2.2" opacity=".75"/>
+                <path d="M104 132 86 152 88 208" stroke="url(#opRim)" stroke-width="2.2" opacity=".55"/>
+                <path d="M118 256 116 330 118 398" stroke="url(#opRim)" stroke-width="2" opacity=".5"/>
+                <path d="M113 398 110 416" stroke="url(#opRim)" stroke-width="1.6" opacity=".4"/>
+                <path d="M118 138 146 132M182 138 154 132" stroke="#9dafb2" opacity=".3"/>
+                <circle class="op-spark" cx="214" cy="190" r="1.6" fill="#c8ff52"/>
+                <circle class="op-spark" cx="84" cy="238" r="1.2" fill="#c8ff52"/>
+                <circle class="op-spark" cx="224" cy="300" r="1.4" fill="#7de6d8"/>
+                <circle class="op-spark" cx="96" cy="332" r="1" fill="#c8ff52"/>
+              </svg>
+
+              <svg class="operative-silhouette operative-female" viewBox="0 0 300 440" fill="none" aria-hidden="true">
+                <defs>
+                  <linearGradient id="opfArmor" x1="90" y1="58" x2="212" y2="420" gradientUnits="userSpaceOnUse"><stop stop-color="#617175"/><stop offset=".38" stop-color="#2e3a3e"/><stop offset=".74" stop-color="#151d1f"/><stop offset="1" stop-color="#080d0e"/></linearGradient>
+                  <linearGradient id="opfArmorLight" x1="96" y1="116" x2="204" y2="386" gradientUnits="userSpaceOnUse"><stop stop-color="#7a8b8f"/><stop offset=".5" stop-color="#354346"/><stop offset="1" stop-color="#161f21"/></linearGradient>
+                  <linearGradient id="opfCloth" x1="122" y1="118" x2="178" y2="408" gradientUnits="userSpaceOnUse"><stop stop-color="#252f31"/><stop offset=".55" stop-color="#131b1c"/><stop offset="1" stop-color="#080d0e"/></linearGradient>
+                  <linearGradient id="opfVisor" x1="136" y1="60" x2="166" y2="78" gradientUnits="userSpaceOnUse"><stop stop-color="#f0ffb8"/><stop offset=".45" stop-color="#c8ff52"/><stop offset="1" stop-color="#739c22"/></linearGradient>
+                  <linearGradient id="opfLime" x1="122" y1="214" x2="178" y2="256" gradientUnits="userSpaceOnUse"><stop stop-color="#e2ff9c"/><stop offset="1" stop-color="#a8d93e"/></linearGradient>
+                  <linearGradient id="opfRim" x1="90" y1="66" x2="124" y2="378" gradientUnits="userSpaceOnUse"><stop stop-color="#b7fff4" stop-opacity=".9"/><stop offset=".55" stop-color="#7de6d8" stop-opacity=".35"/><stop offset="1" stop-color="#7de6d8" stop-opacity="0"/></linearGradient>
+                  <radialGradient id="opfFloor"><stop stop-color="#c8ff52" stop-opacity=".5"/><stop offset="1" stop-color="#c8ff52" stop-opacity="0"/></radialGradient>
+                  <filter id="opfGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                </defs>
+
+                <ellipse cx="150" cy="416" rx="74" ry="12" fill="url(#opfFloor)"/>
+                <g class="hero-cape">
+                  <path d="M188 146 C206 190 210 252 204 306 C200 344 190 374 176 396 C180 354 176 314 170 280 C164 242 170 186 176 152Z" fill="url(#opfCloth)" stroke="#0b1112" stroke-width="2"/>
+                  <path d="M204 306 C200 344 190 374 176 396" stroke="url(#opfRim)" stroke-width="2" opacity=".5"/>
+                  <path d="M190 172 C200 214 202 258 198 300M194 180 C204 216 206 256 202 292" stroke="#3c4b4e" opacity=".45"/>
+                  <path d="M176 162 C190 198 194 240 192 274" stroke="#c8ff52" opacity=".16"/>
+                </g>
+                <g class="hero-legs">
+                <g id="opFLeg">
+                  <path d="M126 230 152 230 149 284 143 310 148 380 150 412 118 412 115 310 120 284Z" fill="url(#opfCloth)" stroke="#080d0e" stroke-width="2"/>
+                  <path d="M121 250 151 248 148 292 122 294Z" fill="url(#opfArmor)" stroke="#4c5d61" stroke-width="1.4"/>
+                  <path d="M123 296 147 296 145 326 124 328Z" fill="url(#opfArmorLight)" stroke="#5b6c70" stroke-width="1.4"/>
+                  <path d="M126 326 144 326 146 376 121 376Z" fill="url(#opfCloth)" stroke="#364447" stroke-width="1.2"/>
+                  <path d="M128 330 143 330 144 372 124 372Z" fill="url(#opfArmorLight)" stroke="#46565a"/>
+                  <path d="M114 376 147 376 155 414 109 414Z" fill="#0a1011" stroke="#3e4d50" stroke-width="1.4"/>
+                  <path d="M112 404 151 404" stroke="#46565a" opacity=".7"/>
+                  <path d="M116 262 139 262 139 288 116 288Z" fill="#131b1d" stroke="#3c4b4e"/>
+                  <path d="M118 265 136 265" stroke="#c8ff52" opacity=".4"/>
+                  <circle cx="128" cy="277" r="1.6" fill="#c8ff52" opacity=".8"/>
+                  <path d="M123 306 145 306M127 340 141 340" stroke="#c8ff52" opacity=".45"/>
+                </g>
+                <use href="#opFLeg" transform="translate(300 0) scale(-1 1)"/>
+                </g>
+
+                <g class="hero-upper">
+                <path d="M113 122 187 122 181 194 173 230 127 230 119 194Z" fill="url(#opfCloth)" stroke="#080d0e" stroke-width="2"/>
+                <path d="M118 124 182 124 176 186 167 212 133 212 124 186Z" fill="url(#opfArmor)" stroke="#4c5d61" stroke-width="1.5"/>
+                <path d="M150 125 150 208" stroke="#080d0e" stroke-width="2"/>
+                <path d="M124 136 147 131 147 160 128 168Z" fill="url(#opfArmorLight)" stroke="#435256"/>
+                <path d="M176 136 153 131 153 160 172 168Z" fill="url(#opfArmorLight)" stroke="#435256"/>
+                <path d="M127 170 147 163 147 184 130 192Z" fill="url(#opfArmorLight)" stroke="#3b4a4e"/>
+                <path d="M173 170 153 163 153 184 170 192Z" fill="url(#opfArmorLight)" stroke="#3b4a4e"/>
+                <path d="M131 126 124 194 136 198 142 132Z" fill="#151e20" stroke="#3c4b4e"/>
+                <path d="M169 126 176 194 164 198 158 132Z" fill="#151e20" stroke="#3c4b4e"/>
+                <path d="M146 146 154 146 151 158 149 158Z" fill="url(#opfLime)" filter="url(#opfGlow)" class="visor-glow"/>
+                <path d="M128 194 C133 204 133 218 129 232" stroke="#5b6d70" opacity=".5"/>
+                <path d="M172 194 C167 204 167 218 171 232" stroke="#5b6d70" opacity=".5"/>
+                <path d="M121 208 179 208 183 232 117 232Z" fill="#0f1617" stroke="#3c4b4e"/>
+                <rect class="hero-core" x="143" y="212" width="14" height="14" rx="2" fill="url(#opfLime)" opacity=".9"/>
+                <rect x="126" y="214" width="12" height="11" rx="2" fill="#1b2628" stroke="#46565a"/>
+                <rect x="162" y="214" width="12" height="11" rx="2" fill="#1b2628" stroke="#46565a"/>
+                <path d="M116 230 184 230 181 254 119 254Z" fill="url(#opfCloth)" stroke="#0b1112"/>
+                <path d="M119 230 137 230 133 270 116 258Z" fill="url(#opfArmor)" stroke="#4c5d61" stroke-width="1.3"/>
+                <path d="M181 230 163 230 167 270 184 258Z" fill="url(#opfArmor)" stroke="#4c5d61" stroke-width="1.3"/>
+                <path d="M121 237 132 237" stroke="#c8ff52" opacity=".45"/>
+                <path d="M179 237 168 237" stroke="#c8ff52" opacity=".45"/>
+
+                <path d="M110 124 92 144 94 200 108 218 117 208 111 172 122 144Z" fill="url(#opfArmorLight)" stroke="#080d0e" stroke-width="2"/>
+                <path d="M90 140 118 132 127 154 102 168Z" fill="url(#opfArmor)" stroke="#4c5d61"/>
+                <path d="M90 142 118 134" stroke="#c8ff52" opacity=".7"/>
+                <path d="M96 196 110 190 134 268 120 282Z" fill="url(#opfArmorLight)" stroke="#435256" stroke-width="1.5"/>
+                <path d="M99 202 111 198" stroke="#c8ff52" opacity=".45"/>
+
+                <path d="M190 124 208 144 206 200 192 218 183 208 189 172 178 144Z" fill="url(#opfArmorLight)" stroke="#080d0e" stroke-width="2"/>
+                <path d="M210 140 182 132 173 154 198 168Z" fill="url(#opfArmor)" stroke="#4c5d61"/>
+                <path d="M210 142 182 134" stroke="#c8ff52" opacity=".7"/>
+                <path d="M204 196 190 190 196 240 210 244Z" fill="url(#opfArmorLight)" stroke="#435256" stroke-width="1.5"/>
+                <path d="M201 202 189 198" stroke="#c8ff52" opacity=".45"/>
+
+                <g class="hero-weapon">
+                <g transform="rotate(-18 158 260)">
+                  <path d="M82 256 110 254 119 247 130 249 130 275 117 277 109 270 84 273Z" fill="#0d1415" stroke="#415154" stroke-width="1.5"/>
+                  <rect x="108" y="250" width="68" height="26" rx="3" fill="url(#opfArmor)" stroke="#4c5d61" stroke-width="1.4"/>
+                  <rect x="176" y="252" width="42" height="18" rx="3" fill="#182123" stroke="#46565a"/>
+                  <path d="M218 256 246 256 251 260 246 264 218 264Z" fill="#0c1314" stroke="#3e4d50"/>
+                  <path d="M146 275 163 275 169 302 148 304Z" fill="#141c1e" stroke="#46565a"/>
+                  <path d="M124 272 136 276 128 300 117 296Z" fill="#151d1f" stroke="#46565a"/>
+                  <path d="M158 250 180 250 182 240 160 240Z" fill="#222d30" stroke="#4c5d61"/>
+                  <rect x="162" y="230" width="28" height="11" rx="3" fill="#0f1617" stroke="#4c5d61"/>
+                  <rect x="167" y="233" width="18" height="5" rx="1" fill="url(#opfVisor)" class="visor-glow"/>
+                  <path d="M114 260 176 260M190 258 220 258" stroke="#c8ff52" opacity=".45"/>
+                  <path d="M90 264 108 264" stroke="#c8ff52" opacity=".25"/>
+                  <path d="M200 254 226 254" stroke="#6f8084" opacity=".5"/>
+                </g>
+                </g>
+                <path d="M121 279 137 273 145 290 129 298Z" fill="#263538" stroke="#71858a" stroke-width="1.3"/>
+                <path d="M126 281 139 277" stroke="#c8ff52" opacity=".8"/>
+                <path d="M128 284 133 282M132 288 137 286M136 291 140 289" stroke="#0b1112" opacity=".6"/>
+                <path d="M189 236 205 232 212 249 196 255Z" fill="#263538" stroke="#71858a" stroke-width="1.3"/>
+                <path d="M194 238 207 235" stroke="#c8ff52" opacity=".8"/>
+                <path d="M198 241 203 239M201 245 206 243M204 249 209 247" stroke="#0b1112" opacity=".6"/>
+
+                <path d="M142 96 159 96 161 120 140 120Z" fill="#1a2325"/>
+                <path d="M127 108 173 108 178 126 122 126Z" fill="url(#opfArmorLight)" stroke="#4c5d61" stroke-width="1.4"/>
+                <g class="hero-head">
+                <g class="hero-hair">
+                <path d="M164 48 C184 44 198 58 200 80 C202 102 192 122 178 140 C174 128 166 112 160 98Z" fill="url(#opfCloth)" stroke="#0b1112" stroke-width="2"/>
+                <path d="M190 62 C196 80 193 104 182 130" stroke="url(#opfRim)" stroke-width="1.8" opacity=".55"/>
+                <path d="M172 70 C182 86 184 106 178 124" stroke="#46565a" opacity=".5"/>
+                <path d="M164 58 173 54 176 62 167 66Z" fill="url(#opfLime)" opacity=".8"/>
+                <path d="M170 62 C182 74 186 94 182 112" stroke="#3c4b4e" opacity=".6"/>
+                </g>
+                <path d="M134 50 142 37 159 36 168 46 171 68 165 88 151 97 137 88 131 68Z" fill="url(#opfArmor)" stroke="#56686c" stroke-width="2"/>
+                <path d="M136 50 143 39 159 38 155 48 139 54Z" fill="#687a7d" opacity=".55"/>
+                <path d="M135 58 168 56 166 77 137 79Z" fill="#070c0d" stroke="#546569" stroke-width="1.4"/>
+                <path d="M139 62 165 60 163 75 141 77Z" fill="url(#opfVisor)" filter="url(#opfGlow)" class="visor-glow"/>
+                <path d="M142 65 161 63" stroke="#f5ffd6" stroke-width="1.2" opacity=".75"/>
+                <path d="M137 79 165 77 161 93 151 97 139 93Z" fill="#0c1314" stroke="#3c4b4e" stroke-width="1.2"/>
+                <path d="M142 85 160 84M141 89 158 88" stroke="#39484b"/>
+                <path d="M125 58 133 58 135 78 126 80Z" fill="url(#opfArmorLight)" stroke="#4c5d61"/>
+                <path d="M175 58 167 58 165 78 174 80Z" fill="url(#opfArmorLight)" stroke="#4c5d61"/>
+                <path d="M127 62 131 62 132 76 128 76Z" fill="#c8ff52" opacity=".5"/>
+                <path d="M173 62 169 62 168 76 172 76Z" fill="#c8ff52" opacity=".5"/>
+                <path d="M172 48 179 44 183 66 176 70Z" fill="#1a2325" stroke="#4c5d61" stroke-width="1.2"/>
+                <path d="M178 42 182 40 185 55 181 57Z" fill="url(#opfLime)" filter="url(#opfGlow)" class="visor-glow"/>
+                </g>
+                </g>
+
+                <path d="M134 50 131 68 137 88 144 94" stroke="url(#opfRim)" stroke-width="2.2" opacity=".75"/>
+                <path d="M110 124 92 144 94 200" stroke="url(#opfRim)" stroke-width="2.2" opacity=".55"/>
+                <path d="M126 252 115 310 118 380" stroke="url(#opfRim)" stroke-width="2" opacity=".5"/>
+                <path d="M114 380 109 414" stroke="url(#opfRim)" stroke-width="1.6" opacity=".4"/>
+                <path d="M124 136 147 131M176 136 153 131" stroke="#9dafb2" opacity=".3"/>
+                <circle class="op-spark" cx="210" cy="196" r="1.6" fill="#c8ff52"/>
+                <circle class="op-spark" cx="88" cy="240" r="1.2" fill="#c8ff52"/>
+                <circle class="op-spark" cx="218" cy="296" r="1.4" fill="#7de6d8"/>
+                <circle class="op-spark" cx="96" cy="336" r="1" fill="#c8ff52"/>
+              </svg>
+
+              <div class="operative-switch" role="group" aria-label="干员形象切换">
+                <button type="button" class="active" data-operative="male" aria-pressed="true">男</button>
+                <button type="button" data-operative="female" aria-pressed="false">女</button>
+              </div>
+              <div class="operative-scan" aria-hidden="true"></div>
+              <div class="operative-boot-label">PHOENIX // UNIT ONLINE</div>
+              <div class="operative-name"><small>先锋干员</small><strong>PHOENIX</strong><span>凤 凰</span></div>
+            </div>
+            <div class="operative-stats">
+              <div><span>主武器</span><strong>VX-27 战术步枪</strong></div>
+              <div><span>作战技能</span><strong>突破 / 核心安置</strong></div>
+            </div>
+          </aside>
+        </div>
+
+        <footer class="menu-footer">
+          <div class="map-preview"><span class="map-grid"></span><div><small>作战区域 / 01</small><strong>黑潮工业港</strong><span>KUROTIDE FACILITY · 22:40</span></div></div>
+          <div class="quick-controls"><span><kbd>W A S D</kbd> 移动</span><span><kbd>SHIFT</kbd> 静步</span><span><kbd>V</kbd> 第三人称</span><span><kbd>E</kbd> 安置核心</span><span><kbd>R</kbd> 换弹</span></div>
+          <div class="version">ONLINE<br /><span>v0.1.0</span></div>
+        </footer>
+      </section>
+
+      <section id="hud" class="hud hidden" aria-label="游戏界面">
+        <div class="top-hud">
+          <div class="team-score friendly"><span id="friendly-label">守序者</span><strong id="friendly-score">0</strong></div>
+          <div class="round-info"><small id="round-label">ROUND 01</small><strong id="round-timer">01:40</strong><span id="phase-label">核心安置阶段</span></div>
+          <div class="team-score enemy"><strong id="enemy-score">0</strong><span id="enemy-label">失控者</span></div>
+        </div>
+        <div id="enemy-pips" class="enemy-pips"></div>
+        <div id="objective-banner" class="objective-banner"><span class="objective-diamond"></span><div><small>当前目标</small><strong>前往 A 点安置量子核心</strong></div></div>
+        <div id="kill-feed" class="kill-feed"></div>
+        <div class="minimap-shell">
+          <div class="minimap-title"><span>战术地图</span><b>A</b></div>
+          <canvas id="minimap" width="220" height="220"></canvas>
+          <div class="minimap-coords">KRTD // SECTOR 07</div>
+        </div>
+        <div id="crosshair" class="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
+        <div id="hitmarker" class="hitmarker"><i></i><i></i><i></i><i></i></div>
+        <div id="interaction" class="interaction hidden"><div class="interaction-key">E</div><div><strong id="interaction-text">按住安置量子核心</strong><span class="progress-track"><i id="interaction-progress"></i></span></div></div>
+        <div class="bottom-hud">
+          <div class="vitals">
+            <div class="operative-badge">P</div>
+            <div class="health-block"><div><span>生命值</span><strong id="health-value">100</strong></div><div class="vital-track"><i id="health-bar"></i></div></div>
+            <div class="armor-block"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 20 6v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z" stroke="currentColor" stroke-width="1.5"/></svg><strong id="armor-value">50</strong></div>
+          </div>
+          <div class="weapon-hud">
+            <div class="weapon-meta"><span id="weapon-name">VX-27</span><small id="fire-mode">全自动</small></div>
+            <div class="ammo"><strong id="ammo-value">30</strong><span>/</span><b id="reserve-value">90</b></div>
+            <div class="ammo-ticks" id="ammo-ticks"></div>
+            <div class="reload-track" id="reload-track"><i id="reload-fill"></i></div>
+            <div class="heat-row" id="heat-row"><span id="heat-label">枪管温度</span><div class="heat-track"><i id="heat-fill"></i></div></div>
+            <div class="equipment-row"><span><kbd>G</kbd> 破片手雷</span><b id="grenade-count">2</b></div>
+          </div>
+        </div>
+        <div id="heal-buff" class="heal-buff hidden"><span class="heal-icon">+</span><div><strong>击杀恢复</strong><small><b id="heal-buff-time">3.0</b>s · +10 HP/s</small></div></div>
+        <div id="pickup-toast" class="pickup-toast hidden"><span class="pickup-icon">+</span><div><strong id="pickup-title">医疗包</strong><small id="pickup-desc">+30 生命值</small></div></div>
+        <div id="buy-phase" class="buy-phase"><kbd>B</kbd><span>购买武器</span><strong id="credits-value">$ 5000</strong><i></i><b id="buy-time">20 秒</b></div>
+        <div class="control-hints"><span><kbd>R</kbd> 换弹</span><span><kbd>B</kbd> 购买</span><span><kbd>1 / 2 / 3</kbd> 切换武器</span><span><kbd>Q</kbd> 快速切枪</span><span><kbd>F</kbd> 检视</span><span><kbd>G</kbd> 手雷</span><span id="scope-hint" class="hidden"><kbd>右键</kbd> 开镜</span><span><kbd>V</kbd> 第三人称</span><span><kbd>ESC</kbd> 暂停</span></div>
+        <div id="damage-direction" class="damage-direction"></div>
+        <div id="announcement" class="announcement hidden"><small id="announcement-kicker">ROUND START</small><strong id="announcement-title">行动开始</strong><span id="announcement-subtitle">突破防线，安置量子核心</span></div>
+        <div id="bomb-status" class="bomb-status hidden"><span></span> 核心已安置 <strong id="bomb-timer">40.0</strong></div>
+        <div id="online-status" class="online-status hidden"><span class="status-dot"></span><b id="online-room">ROOM</b><small id="online-team-label">守序者</small></div>
+        <div id="gamepad-status" class="gamepad-status hidden">手柄已连接</div>
+        <div id="respawn-overlay" class="respawn-overlay hidden"><small>YOU WERE ELIMINATED</small><strong>等待重生</strong><b id="respawn-timer">3.0</b><span id="respawn-killer">正在返回战场</span></div>
+
+        <div id="touch-controls" class="touch-controls">
+          <div id="touch-look" class="touch-look" aria-hidden="true"></div>
+          <div class="touch-stick-wrap">
+            <div id="touch-move" class="touch-stick" aria-label="移动摇杆"><i id="touch-move-knob"></i></div>
+            <span>移动</span>
+          </div>
+          <div class="touch-topbar">
+            <button type="button" class="touch-chip" data-touch="buy">购买</button>
+            <button type="button" class="touch-chip" data-touch="thirdperson">视角</button>
+            <button type="button" class="touch-chip touch-chip-pause" data-touch="pause">暂停</button>
+          </div>
+          <div class="touch-pad">
+            <button type="button" class="touch-btn" data-touch="interact">E</button>
+            <button type="button" class="touch-btn" data-touch="grenade">手雷</button>
+            <button type="button" class="touch-btn" data-touch="weapon">切枪</button>
+            <button type="button" class="touch-btn" data-touch="reload">换弹</button>
+            <button type="button" class="touch-btn" data-touch="jump">跳</button>
+            <button type="button" class="touch-btn" data-touch="crouch">蹲</button>
+          </div>
+          <button type="button" class="touch-btn touch-scope" data-touch="scope">开镜</button>
+          <button type="button" class="touch-fire" data-touch="fire">开火</button>
+          <div class="touch-portrait-tip">建议横屏游玩</div>
+        </div>
+      </section>
+
+      <div id="scope-overlay" class="scope-overlay">
+        <div class="scope-circle">
+          <span class="scope-line-v"></span>
+          <span class="scope-line-h"></span>
+          <span class="scope-dot"></span>
+          <i class="scope-mil m1"></i><i class="scope-mil m2"></i><i class="scope-mil m3"></i><i class="scope-mil m4"></i>
+        </div>
+        <div class="scope-caption"><span id="scope-caption-name">AX-9 苍穹 · 6.5×</span><small>按住 SHIFT 稳定呼吸</small></div>
+      </div>
+
+      <section id="pause-menu" class="modal-layer hidden">
+        <div class="pause-card">
+          <div class="eyebrow"><span></span> OPERATION SUSPENDED</div>
+          <h2>行动暂停</h2><p>作战计时已暂停，准备好后返回战场。</p>
+          <button id="resume-button" class="deploy-button"><span>继续行动</span><small>RESUME</small></button>
+          <button id="restart-button" class="secondary-button">重新开始本轮</button>
+          <button id="pause-settings" class="secondary-button">游戏设置</button>
+          <button id="quit-button" class="text-button">返回作战终端</button>
+          <div class="pause-controls"><span>WASD 移动</span><span>鼠标 瞄准</span><span>左键 攻击</span><span>B 购买武器</span><span>Q 快速切枪</span><span>F 检视武器</span><span>G 投掷手雷</span><span>V 第三人称</span><span>E 安置核心</span></div>
+          <div class="touch-help">左侧摇杆移动 · 右侧滑动瞄准<br />右下角开火与开镜 · 右侧按钮跳跃 / 下蹲 / 换弹 / 切枪<br />右上角可购买装备、切换视角或暂停<br />支持蓝牙 / USB 手柄，连接后自动识别</div>
+        </div>
+      </section>
+
+      <section id="settings-modal" class="modal-layer hidden">
+        <div class="pause-card settings-card">
+          <div class="eyebrow"><span></span> SYSTEM CONFIG</div>
+          <h2>游戏设置</h2>
+          <p>调整操作与画质，设置会自动保存到本地。</p>
+          <div class="settings-list">
+            <label class="setting-row" for="setting-sensitivity">
+              <span><strong>鼠标 / 手柄灵敏度</strong><small>键鼠与手柄转向速度</small></span>
+              <input id="setting-sensitivity" type="range" min="0.4" max="2" step="0.05" value="1" />
+              <b id="setting-sensitivity-value">1.00</b>
+            </label>
+            <label class="setting-row touch-only-row" for="setting-touch-sensitivity">
+              <span><strong>触屏灵敏度</strong><small>触屏滑动转向速度</small></span>
+              <input id="setting-touch-sensitivity" type="range" min="0.4" max="2.5" step="0.05" value="1" />
+              <b id="setting-touch-sensitivity-value">1.00</b>
+            </label>
+            <label class="setting-row" for="setting-fov">
+              <span><strong>视野 FOV</strong><small>数值越大视野越广</small></span>
+              <input id="setting-fov" type="range" min="65" max="90" step="1" value="73" />
+              <b id="setting-fov-value">73°</b>
+            </label>
+            <label class="setting-row" for="setting-volume">
+              <span><strong>主音量</strong><small>枪声、脚步与提示音</small></span>
+              <input id="setting-volume" type="range" min="0" max="100" step="5" value="65" />
+              <b id="setting-volume-value">65</b>
+            </label>
+            <div class="setting-row">
+              <span><strong>渲染质量</strong><small>流畅模式会降低内部分辨率以提升帧率</small></span>
+              <div class="setting-choice" id="quality-choices">
+                <button type="button" data-quality="low">流畅</button>
+                <button type="button" data-quality="medium">均衡</button>
+                <button type="button" data-quality="high" class="active">高清</button>
+              </div>
+            </div>
+          </div>
+          <div class="settings-footer">
+            <button id="settings-reset" class="text-button">恢复默认</button>
+            <button id="settings-done" class="deploy-button"><span>完成</span><small>APPLY</small></button>
+          </div>
+        </div>
+      </section>
+
+      <section id="buy-menu" class="modal-layer hidden">
+        <div class="buy-panel">
+          <header class="buy-header">
+            <div><div class="eyebrow"><span></span> REQUISITION TERMINAL</div><h2>作战装备采购</h2><p>购买阶段内选择主武器，购买后立即装备</p></div>
+            <div class="buy-balance"><small>可用资金</small><strong id="buy-credits">$ 5000</strong><span>击杀 +$200 / 胜利 +$3000</span></div>
+            <button id="close-buy" class="close-button" aria-label="关闭购买菜单">×</button>
+          </header>
+          <div class="buy-content">
+            <aside class="buy-sidebar">
+              <button type="button" class="buy-category active" data-buy-category="primary">主武器 <b>07</b></button>
+              <button type="button" class="buy-category" data-buy-category="secondary">副武器 <b>02</b></button>
+              <button type="button" class="buy-category" data-buy-category="melee">近战 <b>01</b></button>
+              <div class="owned-loadout"><small>当前配置</small><div><kbd>1</kbd><span>主武器</span></div><div><kbd>2</kbd><span>副武器</span></div><div><kbd>3</kbd><span>K-7 爪刃 · 已拥有</span></div></div>
+              <p><kbd>F</kbd> 战场内检视武器<br />购买阶段结束后无法再次采购</p>
+            </aside>
+            <div class="buy-grid">
+              <button class="buy-weapon-card" data-buy-weapon="smg" data-category="primary">
+                <span class="weapon-class">冲锋枪 / SMG</span><span class="buy-action">$ 1600</span>
+                <div class="weapon-art smg-art"><i></i><i></i><i></i><i></i><b>09</b></div>
+                <h3>VX-9 蜂刺</h3><p>极高射速与机动性，适合近距离快速突破。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:42%"></i></span><span>射速 <i style="--value:94%"></i></span><span>控制 <i style="--value:72%"></i></span></div>
+                <div class="weapon-capacity">30 / 90 <span>全自动</span></div>
+              </button>
+              <button class="buy-weapon-card" data-buy-weapon="shotgun" data-category="primary">
+                <span class="weapon-class">霰弹枪 / SHOTGUN</span><span class="buy-action">$ 1800</span>
+                <div class="weapon-art shotgun-art"><i></i><i></i><i></i><i></i><b>12</b></div>
+                <h3>B-12 重锤</h3><p>一次发射 8 枚弹丸，近距离拥有强大爆发力。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:92%"></i></span><span>射速 <i style="--value:25%"></i></span><span>控制 <i style="--value:38%"></i></span></div>
+                <div class="weapon-capacity">7 / 28 <span>泵动式</span></div>
+              </button>
+              <button class="buy-weapon-card" data-buy-weapon="rifle" data-category="primary">
+                <span class="weapon-class">步枪 / RIFLE</span><span class="buy-action">$ 2700</span>
+                <div class="weapon-art rifle-art"><i></i><i></i><i></i><i></i><b>27</b></div>
+                <h3>VX-27</h3><p>稳定精准的全自动步枪，适应各类交战距离。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:66%"></i></span><span>射速 <i style="--value:76%"></i></span><span>控制 <i style="--value:67%"></i></span></div>
+                <div class="weapon-capacity">30 / 90 <span>全自动</span></div>
+              </button>
+              <button class="buy-weapon-card" data-buy-weapon="dmr" data-category="primary">
+                <span class="weapon-class">精确射手 / MARKSMAN</span><span class="buy-action">$ 3200</span>
+                <div class="weapon-art dmr-art"><i></i><i></i><i></i><i></i><b>08</b></div>
+                <h3>SR-8 裁决</h3><p>2.5× 瞄准镜半自动射手步枪，远距离两发制敌，兼顾持续火力。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:84%"></i></span><span>射速 <i style="--value:40%"></i></span><span>控制 <i style="--value:58%"></i></span></div>
+                <div class="weapon-capacity">12 / 36 <span>半自动 · 可开镜</span></div>
+              </button>
+              <button class="buy-weapon-card" data-buy-weapon="scout" data-category="primary">
+                <span class="weapon-class">轻型狙击 / SCOUT</span><span class="buy-action">$ 3000</span>
+                <div class="weapon-art sniper-art"><i></i><i></i><i></i><i></i><b>45</b></div>
+                <h3>S-45 游隼</h3><p>轻量栓动狙击，4.5× 瞄准镜与折叠脚架，移动速度更快。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:88%"></i></span><span>射速 <i style="--value:30%"></i></span><span>控制 <i style="--value:42%"></i></span></div>
+                <div class="weapon-capacity">6 / 24 <span>栓动 · 可开镜</span></div>
+              </button>
+              <button class="buy-weapon-card" data-buy-weapon="autoSniper" data-category="primary">
+                <span class="weapon-class">半自动狙击 / AUTO SNIPER</span><span class="buy-action">$ 4200</span>
+                <div class="weapon-art dmr-art"><i></i><i></i><i></i><i></i><b>V8</b></div>
+                <h3>V-8 猎隼</h3><p>3.5× 半自动狙击，10 发扩容弹匣，适合连续压制远距离目标。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:86%"></i></span><span>射速 <i style="--value:52%"></i></span><span>控制 <i style="--value:44%"></i></span></div>
+                <div class="weapon-capacity">10 / 40 <span>半自动 · 可开镜</span></div>
+              </button>
+              <button class="buy-weapon-card" data-buy-weapon="scopedRifle" data-category="primary">
+                <span class="weapon-class">步枪 / SCOPED RIFLE</span><span class="buy-action">$ 3400</span>
+                <div class="weapon-art rifle-art"><i></i><i></i><i></i><i></i><b>05</b></div>
+                <h3>AR-5 鹰眼</h3><p>2× 紧凑瞄具全自动步枪，在开镜精度与持续火力之间取得平衡。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:64%"></i></span><span>射速 <i style="--value:78%"></i></span><span>控制 <i style="--value:62%"></i></span></div>
+                <div class="weapon-capacity">25 / 75 <span>全自动 · 可开镜</span></div>
+              </button>
+              <button class="buy-weapon-card" data-buy-weapon="lmg" data-category="primary">
+                <span class="weapon-class">轻机枪 / LMG</span><span class="buy-action">$ 3900</span>
+                <div class="weapon-art lmg-art"><i></i><i></i><i></i><i></i><b>07</b></div>
+                <h3>MG-7 碾骨</h3><p>60 发弹鼓持续压制，适合封锁通道和掩护核心安置。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:64%"></i></span><span>射速 <i style="--value:88%"></i></span><span>控制 <i style="--value:46%"></i></span></div>
+                <div class="weapon-capacity">60 / 120 <span>全自动</span></div>
+              </button>
+              <button class="buy-weapon-card" data-buy-weapon="sniper" data-category="primary">
+                <span class="weapon-class">狙击枪 / SNIPER</span><span class="buy-action">$ 4500</span>
+                <div class="weapon-art sniper-art"><i></i><i></i><i></i><i></i><b>90</b></div>
+                <h3>M-90 长夜</h3><p>3.5× 瞄准镜栓动狙击，单发致命，开镜后精准度极高。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:100%"></i></span><span>射速 <i style="--value:12%"></i></span><span>控制 <i style="--value:30%"></i></span></div>
+                <div class="weapon-capacity">5 / 15 <span>栓动 · 可开镜</span></div>
+              </button>
+              <button class="buy-weapon-card" data-buy-weapon="scopedSniper" data-category="primary">
+                <span class="weapon-class">狙击枪 / SCOPED SNIPER</span><span class="buy-action">$ 4750</span>
+                <div class="weapon-art sniper-art"><i></i><i></i><i></i><i></i><b>65</b></div>
+                <h3>AX-9 苍穹</h3><p>6.5× 可变倍率瞄准镜，按住右键开镜，稳定蓄力后一击致命。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:100%"></i></span><span>射速 <i style="--value:10%"></i></span><span>控制 <i style="--value:24%"></i></span></div>
+                <div class="weapon-capacity">5 / 15 <span>栓动 · 可开镜</span></div>
+              </button>
+              <button class="buy-weapon-card hidden" data-buy-weapon="pistol" data-category="secondary">
+                <span class="weapon-class">副武器 / SIDEARM</span><span class="buy-action">已拥有</span>
+                <div class="weapon-art pistol-art"><i></i><i></i><i></i><i></i><b>12</b></div>
+                <h3>P-12 战术手枪</h3><p>12 发半自动副武器，主武器换弹时的可靠应急选择。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:58%"></i></span><span>射速 <i style="--value:52%"></i></span><span>控制 <i style="--value:80%"></i></span></div>
+                <div class="weapon-capacity">12 / 48 <span>半自动</span></div>
+              </button>
+              <button class="buy-weapon-card hidden" data-buy-weapon="heavy" data-category="secondary">
+                <span class="weapon-class">副武器 / SIDEARM</span><span class="buy-action">$ 700</span>
+                <div class="weapon-art heavy-art"><i></i><i></i><i></i><i></i><b>05</b></div>
+                <h3>D-5 蝰蛇</h3><p>7 发重型半自动手枪，单发威力极高，配有补偿器与微型红点。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:82%"></i></span><span>射速 <i style="--value:38%"></i></span><span>控制 <i style="--value:52%"></i></span></div>
+                <div class="weapon-capacity">7 / 21 <span>半自动</span></div>
+              </button>
+              <button class="buy-weapon-card hidden" data-buy-weapon="knife" data-category="melee">
+                <span class="weapon-class">近战 / MELEE</span><span class="buy-action">已拥有</span>
+                <div class="weapon-art knife-art"><i></i><i></i><i></i><i></i><b>K7</b></div>
+                <h3>K-7 爪刃</h3><p>弧形爪刃配指环握柄，挥砍距离 2.35 米，无声且致命。</p>
+                <div class="weapon-stats"><span>伤害 <i style="--value:88%"></i></span><span>射速 <i style="--value:66%"></i></span><span>控制 <i style="--value:100%"></i></span></div>
+                <div class="weapon-capacity">— <span>近战武器</span></div>
+              </button>
+            </div>
+          </div>
+          <footer class="buy-footer"><span id="buy-feedback">选择一件武器进行采购</span><button id="buy-done" class="deploy-button"><span>完成配置</span><small>返回战场</small></button></footer>
+        </div>
+      </section>
+
+      <section id="lobby-menu" class="modal-layer hidden">
+        <div class="lobby-panel">
+          <header class="lobby-header">
+            <div><div class="eyebrow"><span></span> ONLINE LOBBY</div><h2 id="lobby-title">联机大厅</h2><p id="lobby-subtitle">5v5 团队死斗 · 无限复活 · 无限弹药</p></div>
+            <div class="lobby-connection"><span id="lobby-status-dot" class="status-dot"></span><span id="lobby-status">未连接</span></div>
+            <button id="close-lobby" class="close-button" aria-label="关闭联机大厅">×</button>
+          </header>
+          <div class="lobby-content">
+            <aside class="lobby-side">
+              <label class="lobby-field" id="lobby-name-field">作战代号<input id="lobby-name" maxlength="14" value="PHOENIX_01" readonly /></label>
+              <div class="lobby-actions">
+                <button id="lobby-connect" class="secondary-button">连接服务器</button>
+                <button id="lobby-create" class="deploy-button compact"><span>创建房间</span><small>CREATE</small></button>
+              </div>
+              <div class="lobby-section-title"><span>房间列表</span><button id="lobby-refresh">刷新</button></div>
+              <div id="lobby-room-list" class="lobby-room-list"></div>
+              <div class="lobby-join"><input id="lobby-code" maxlength="4" placeholder="房间代码" /><button id="lobby-join">加入</button></div>
+              <p id="lobby-message" class="lobby-message">运行 npm run server 后连接服务器</p>
+            </aside>
+            <div class="lobby-main">
+              <div class="lobby-room-head">
+                <div><small>当前房间</small><strong id="lobby-room-id">—</strong></div>
+                <div><small>比分</small><strong id="lobby-score">0 : 0</strong></div>
+                <div><small>状态</small><strong id="lobby-room-state">未加入</strong></div>
+              </div>
+              <div class="lobby-teams">
+                <div class="lobby-team team-a">
+                  <h3><span>守序者</span><b id="lobby-a-count">0 / 5</b></h3>
+                  <div id="lobby-team-a" class="lobby-slots"></div>
+                </div>
+                <div class="lobby-team team-b">
+                  <h3><span>失控者</span><b id="lobby-b-count">0 / 5</b></h3>
+                  <div id="lobby-team-b" class="lobby-slots"></div>
+                </div>
+              </div>
+              <div class="lobby-controls">
+                <button id="lobby-team-a" class="secondary-button">加入守序者</button>
+                <button id="lobby-team-b" class="secondary-button">加入失控者</button>
+                <button id="lobby-ready" class="secondary-button">准备</button>
+                <button id="lobby-start" class="deploy-button compact"><span>开始对战</span><small>HOST START</small></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="profile-menu" class="modal-layer hidden">
+        <div class="profile-panel">
+          <header class="lobby-header">
+            <div><div class="eyebrow"><span></span> OPERATIVE DOSSIER</div><h2 id="profile-title">个人主页</h2><p id="profile-subtitle">战绩、好友与作战记录</p></div>
+            <div class="profile-actions">
+              <button id="open-admin" class="secondary-button compact hidden" type="button">管理面板</button>
+              <button id="open-password" class="secondary-button compact" type="button">修改密码</button>
+              <button id="profile-logout" class="secondary-button compact" type="button">退出登录</button>
+              <button id="close-profile" class="close-button" type="button" aria-label="关闭个人主页">×</button>
+            </div>
+          </header>
+          <div class="profile-content">
+            <aside class="profile-side">
+              <div class="profile-avatar-large" id="profile-avatar-large">P</div>
+              <strong id="profile-name-large">—</strong>
+              <span id="profile-online" class="profile-online">离线</span>
+              <div id="profile-role" class="profile-role">OPERATIVE</div>
+              <div class="avatar-picker" id="avatar-picker"></div>
+              <div class="profile-stat-grid">
+                <div><strong id="profile-matches">0</strong><span>对局</span></div>
+                <div><strong id="profile-wins">0</strong><span>胜场</span></div>
+                <div><strong id="profile-winrate">0%</strong><span>胜率</span></div>
+                <div><strong id="profile-kd">0</strong><span>K/D</span></div>
+                <div><strong id="profile-kills">0</strong><span>击杀</span></div>
+                <div><strong id="profile-deaths">0</strong><span>阵亡</span></div>
+              </div>
+              <div id="profile-joined" class="profile-joined">—</div>
+              <div id="profile-friend-count" class="profile-joined">好友 0 人</div>
+            </aside>
+            <div class="profile-main">
+              <div id="profile-view-banner" class="profile-view-banner hidden"><span>正在查看 <b id="viewing-name">—</b> 的主页</span><button id="back-to-self" type="button">返回我的主页</button></div>
+              <div class="profile-tabs">
+                <button id="profile-tab-friends" class="active" data-profile-tab="friends" type="button">好友</button>
+                <button id="profile-tab-history" data-profile-tab="history" type="button">战绩记录</button>
+              </div>
+              <section id="profile-friends" class="profile-tab-panel">
+                <div class="friend-add"><input id="friend-name" maxlength="16" placeholder="输入账号添加好友" /><button id="friend-add" type="button">发送申请</button></div>
+                <div id="friend-requests" class="friend-requests"></div>
+                <div class="profile-section-title"><span>好友列表</span><b id="friend-count">0</b></div>
+                <div id="friend-list" class="friend-list"></div>
+              </section>
+              <section id="profile-history" class="profile-tab-panel hidden">
+                <div id="history-list" class="history-list"></div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="duel-queue" class="modal-layer hidden">
+        <div class="duel-card">
+          <div class="duel-emblem"><i></i><i></i></div>
+          <small>1V1 QUICK MATCH</small>
+          <h2>正在搜索对手</h2>
+          <div class="duel-vs"><b id="duel-me-name">我</b><span>VS</span><b id="duel-opponent-name">搜索中…</b></div>
+          <p id="duel-queue-status">保持在线，匹配成功后自动进入战场。</p>
+          <button id="duel-cancel" class="secondary-button" type="button">取消匹配</button>
+        </div>
+      </section>
+
+      <section id="duel-wait" class="modal-layer hidden">
+        <div class="duel-card">
+          <small>DUEL CHALLENGE</small>
+          <h2>等待好友接受</h2>
+          <p>已向 <b id="duel-wait-name">好友</b> 发送 1V1 邀请。</p>
+          <div id="duel-wait-time" class="duel-timer">60</div>
+          <button id="duel-wait-cancel" class="secondary-button" type="button">取消邀请</button>
+        </div>
+      </section>
+
+      <section id="duel-invite" class="modal-layer hidden">
+        <div class="duel-card">
+          <small>DUEL INVITATION</small>
+          <h2>收到单挑邀请</h2>
+          <p><b id="duel-inviter">好友</b> 邀请你进行 1V1 单挑。</p>
+          <div class="duel-actions">
+            <button id="duel-accept" class="deploy-button compact" type="button"><span>接受挑战</span><small>ACCEPT</small></button>
+            <button id="duel-decline" class="secondary-button" type="button">拒绝</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="duel-menu" class="modal-layer hidden">
+        <div class="duel-card duel-menu-card">
+          <small>1V1 DUEL</small>
+          <h2>单挑模式</h2>
+          <p>快速匹配随机对手，或创建房间把邀请码发给好友。</p>
+          <button id="duel-quick" class="deploy-button compact" type="button"><span>快速匹配</span><small>QUICK MATCH</small></button>
+          <div class="duel-divider"><span>或</span></div>
+          <button id="duel-create-room" class="secondary-button" type="button">创建单挑房间</button>
+          <div class="duel-join-row"><input id="duel-code-input" maxlength="4" placeholder="输入 4 位邀请码" /><button id="duel-join-room" type="button">加入</button></div>
+          <button id="duel-menu-close" class="duel-text-button" type="button">返回主菜单</button>
+        </div>
+      </section>
+
+      <section id="duel-room" class="modal-layer hidden">
+        <div class="duel-card">
+          <small>DUEL ROOM</small>
+          <h2>1V1 单挑房间</h2>
+          <p>将邀请码发给好友，对方在 1V1 中输入即可加入。</p>
+          <div class="duel-code"><span>邀请码</span><strong id="duel-room-code">—</strong><button id="duel-copy-code" type="button">复制</button></div>
+          <p id="duel-room-status">等待对手加入…</p>
+          <button id="duel-room-cancel" class="secondary-button" type="button">解散房间</button>
+        </div>
+      </section>
+
+      <section id="admin-panel" class="modal-layer hidden">
+        <div class="admin-panel">
+          <header class="lobby-header">
+            <div><div class="eyebrow"><span></span> OWNER CONTROL</div><h2>服务器管理</h2><p>在线玩家、房间与账号管理</p></div>
+            <div class="profile-actions">
+              <button id="admin-refresh" class="secondary-button compact" type="button">刷新</button>
+              <button id="close-admin" class="close-button" type="button" aria-label="关闭管理面板">×</button>
+            </div>
+          </header>
+          <div class="admin-content">
+            <div id="admin-stats" class="admin-stats"></div>
+            <section class="admin-section admin-limit-section">
+              <h3>账号上限 <b id="admin-limit-current">10000</b></h3>
+              <div class="admin-limit-form">
+                <input id="admin-limit-input" type="number" min="1" max="1000000" step="1" inputmode="numeric" value="10000" />
+                <button id="admin-limit-save" type="button">保存上限</button>
+                <span class="admin-limit-note">已注册 <b id="admin-limit-count">0</b> 个 · 范围 1-1000000 · 降低上限不会删除已有账号</span>
+              </div>
+            </section>
+            <div class="admin-grid">
+              <section class="admin-section">
+                <h3>在线玩家 <b id="admin-online-count">0</b></h3>
+                <div id="admin-online" class="admin-list"></div>
+              </section>
+              <section class="admin-section">
+                <h3>房间 <b id="admin-room-count">0</b></h3>
+                <div id="admin-rooms" class="admin-list"></div>
+              </section>
+            </div>
+            <section class="admin-section">
+              <h3>账号管理 <b id="admin-account-count">0</b></h3>
+              <div id="admin-accounts" class="admin-accounts"></div>
+            </section>
+            <section class="admin-section admin-log-section">
+              <h3>登录日志 <b id="admin-log-count">0</b></h3>
+              <div id="admin-login-log" class="admin-logs"></div>
+            </section>
+            <div class="admin-announce">
+              <input id="admin-announce-input" maxlength="120" placeholder="输入全服公告内容" />
+              <button id="admin-announce-send" type="button">发送公告</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="password-modal" class="modal-layer hidden">
+        <div class="password-card">
+          <small>SECURITY</small>
+          <h2>修改密码</h2>
+          <label class="auth-field"><span>当前密码</span><input id="password-current" type="password" maxlength="64" autocomplete="current-password" /></label>
+          <label class="auth-field"><span>新密码</span><input id="password-next" type="password" maxlength="64" autocomplete="new-password" /></label>
+          <label class="auth-field"><span>确认新密码</span><input id="password-confirm" type="password" maxlength="64" autocomplete="new-password" /></label>
+          <p id="password-error" class="auth-error"></p>
+          <div class="password-actions">
+            <button id="password-cancel" class="secondary-button" type="button">取消</button>
+            <button id="password-submit" class="deploy-button compact" type="button"><span>更新密码</span><small>SAVE</small></button>
+          </div>
+        </div>
+      </section>
+
+      <div id="social-toast" class="social-toast hidden"></div>
+
+      <section id="round-end" class="modal-layer hidden">
+        <div class="result-card"><small id="result-kicker">OPERATION COMPLETE</small><h2 id="result-title">行动成功</h2><p id="result-reason">敌方作战单位已全部清除</p><div class="result-stats"><div><strong id="stat-kills">0</strong><span>击杀</span></div><div><strong id="stat-accuracy">0%</strong><span>命中率</span></div><div><strong id="stat-score">0 : 0</strong><span>回合比分</span></div></div><button id="next-round" class="deploy-button"><span>下一轮行动</span><small>NEXT ROUND</small></button></div>
+      </section>
+
+      <section id="info-modal" class="modal-layer hidden">
+        <div class="info-card"><button id="close-info" class="close-button" aria-label="关闭">×</button><div id="info-content"></div></div>
+      </section>
+
+      <div id="loading-screen">
+        <svg class="boot-operative" viewBox="0 0 240 180" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="bootArmor" x1="60" y1="30" x2="184" y2="180" gradientUnits="userSpaceOnUse"><stop stop-color="#526266"/><stop offset=".58" stop-color="#1a2426"/><stop offset="1" stop-color="#080d0e"/></linearGradient>
+            <linearGradient id="bootVisor" x1="100" y1="62" x2="140" y2="82" gradientUnits="userSpaceOnUse"><stop stop-color="#f0ffb8"/><stop offset=".5" stop-color="#c8ff52"/><stop offset="1" stop-color="#739c22"/></linearGradient>
+            <linearGradient id="bootScan" x1="24" y1="0" x2="216" y2="0" gradientUnits="userSpaceOnUse"><stop stop-color="#c8ff52" stop-opacity="0"/><stop offset=".5" stop-color="#c8ff52" stop-opacity=".9"/><stop offset="1" stop-color="#c8ff52" stop-opacity="0"/></linearGradient>
+            <filter id="bootGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <path class="boot-shoulder" d="M36 178 54 140 88 122 96 100 144 100 152 122 186 140 204 178Z" fill="url(#bootArmor)" stroke="#8fae54" stroke-width="1.4"/>
+          <path class="boot-chest" d="M74 130 166 130 158 176 82 176Z" fill="#0f1718" stroke="#8fa25c" stroke-width="1.2"/>
+          <path d="M108 96 132 96 136 116 104 116Z" fill="#1a2426" stroke="#4e5e50"/>
+          <path d="M96 68 104 44 122 36 138 44 146 68 142 92 120 100 98 92Z" fill="url(#bootArmor)" stroke="#a6c65e" stroke-width="1.4"/>
+          <path d="M94 62 102 62 104 82 96 84Z" fill="#141d1e" stroke="#5b6d55"/>
+          <path d="M146 62 138 62 136 82 144 84Z" fill="#141d1e" stroke="#5b6d55"/>
+          <path class="boot-visor" d="M102 64 138 62 136 80 104 82Z" fill="url(#bootVisor)" filter="url(#bootGlow)"/>
+          <path d="M108 84 132 82 128 96 112 97Z" fill="#0b1112" stroke="#3e4d40"/>
+          <path d="M144 44 152 40 156 64 148 68Z" fill="#1a2426" stroke="#5b6d55"/>
+          <rect x="151" y="37" width="4" height="12" fill="#c8ff52" opacity=".9"/>
+          <path d="M82 140 158 140M92 150 148 150" stroke="#4d6252" opacity=".5"/>
+          <rect class="boot-scan-line" x="24" y="30" width="192" height="1.5" fill="url(#bootScan)"/>
+        </svg>
+        <strong>ZERO PROTOCOL</strong>
+        <span>正在唤醒 PHOENIX 作战单元</span>
+        <div class="loading-track"><i></i></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

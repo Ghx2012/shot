@@ -1,0 +1,233 @@
+const defaultUrl = () => {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const port = location.port;
+  // 本地开发/预览端口直接连接独立联机服务；线上与 Node 托管环境使用同源 /ws
+  if (port && port !== '80' && port !== '443' && port !== '8787') {
+    return `${protocol}//${location.hostname}:8787`;
+  }
+  return `${protocol}//${location.host}/ws`;
+};
+
+export class LobbyClient {
+  constructor(url = import.meta.env.VITE_WS_URL || defaultUrl()) {
+    this.url = url;
+    this.ws = null;
+    this.id = null;
+    this.room = null;
+    this.name = '干员';
+    this.connected = false;
+    this.handlers = new Map();
+    this.manualClose = false;
+  }
+
+  on(event, handler) {
+    this.handlers.set(event, handler);
+    return this;
+  }
+
+  emit(event, payload) {
+    this.handlers.get(event)?.(payload);
+  }
+
+  connect(name = '干员') {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
+    this.name = name;
+    this.manualClose = false;
+    try {
+      this.ws = new WebSocket(this.url);
+    } catch {
+      this.emit('error', { message: '无法连接到联机服务器' });
+      return;
+    }
+    this.ws.addEventListener('open', () => {
+      this.connected = true;
+      this.emit('open');
+    });
+    this.ws.addEventListener('message', (event) => {
+      let message;
+      try {
+        message = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (!message || typeof message.type !== 'string') return;
+      if (message.type === 'welcome') this.id = message.id;
+      if (message.type === 'joined') {
+        this.room = message.room;
+        this.id = message.you || this.id;
+      }
+      if (message.type === 'room' || message.type === 'start') this.room = message.room;
+      if (message.type === 'left') this.room = null;
+      this.emit(message.type, message);
+    });
+    this.ws.addEventListener('close', () => {
+      this.connected = false;
+      this.room = null;
+      this.emit('close');
+    });
+    this.ws.addEventListener('error', () => {
+      this.emit('error', { message: '联机服务器不可达，请先运行 npm run server' });
+    });
+  }
+
+  send(type, data = {}) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    this.ws.send(JSON.stringify({ type, ...data }));
+    return true;
+  }
+
+  registerAccount(username, password) {
+    return this.send('register', { username, password });
+  }
+
+  loginAccount(username, password) {
+    return this.send('login', { username, password });
+  }
+
+  authToken(token) {
+    return this.send('auth', { token });
+  }
+
+  logoutAccount() {
+    return this.send('logout');
+  }
+
+  setAvatar(avatar) {
+    return this.send('setAvatar', { avatar });
+  }
+
+  changePassword(current, next) {
+    return this.send('changePassword', { current, next });
+  }
+
+  adminState() {
+    return this.send('adminState');
+  }
+
+  adminKick(id) {
+    return this.send('adminKick', { id });
+  }
+
+  adminBan(id) {
+    return this.send('adminBan', { id });
+  }
+
+  adminUnban(id) {
+    return this.send('adminUnban', { id });
+  }
+
+  adminResetStats(id) {
+    return this.send('adminResetStats', { id });
+  }
+
+  adminCloseRoom(room) {
+    return this.send('adminCloseRoom', { room });
+  }
+
+  adminAnnounce(message) {
+    return this.send('adminAnnounce', { message });
+  }
+
+  adminSetAccountLimit(limit) {
+    return this.send('adminSetAccountLimit', { limit });
+  }
+
+  addFriend(username) {
+    return this.send('friendRequest', { username });
+  }
+
+  acceptFriend(id) {
+    return this.send('friendAccept', { id });
+  }
+
+  declineFriend(id) {
+    return this.send('friendDecline', { id });
+  }
+
+  removeFriend(id) {
+    return this.send('friendRemove', { id });
+  }
+
+  viewProfile(id = '') {
+    return this.send('viewProfile', { id });
+  }
+
+  queueDuel() {
+    return this.send('duelQueue', { form: this.form || 'male' });
+  }
+
+  cancelDuelQueue() {
+    return this.send('duelCancel');
+  }
+
+  challengeFriend(id) {
+    return this.send('duelChallenge', { id });
+  }
+
+  createDuelRoom() {
+    return this.send('create', { mode: 'duel', form: this.form || 'male' });
+  }
+
+  joinDuelRoom(room) {
+    return this.send('join', { room: String(room || '').toUpperCase(), form: this.form || 'male' });
+  }
+
+  acceptDuel(room) {
+    return this.send('duelAccept', { room, form: this.form || 'male' });
+  }
+
+  declineDuel(room) {
+    return this.send('duelDecline', { room });
+  }
+
+  cancelDuelInvite(room) {
+    return this.send('duelCancelInvite', { room });
+  }
+
+  createRoom(name = this.name, team = 'A', room = '') {
+    this.name = name;
+    return this.send('create', { name, team, room, form: this.form || 'male' });
+  }
+
+  joinRoom(room, name = this.name, team = 'A') {
+    this.name = name;
+    return this.send('join', { room, name, team, form: this.form || 'male' });
+  }
+
+  setTeam(team) {
+    return this.send('team', { team });
+  }
+
+  setReady(ready = true) {
+    return this.send('ready', { ready });
+  }
+
+  start() {
+    return this.send('start');
+  }
+
+  leave() {
+    this.send('leave');
+    this.room = null;
+  }
+
+  sendState(state) {
+    return this.send('state', { state });
+  }
+
+  sendHit(target, damage, headshot = false, weapon = '') {
+    return this.send('hit', { target, damage, headshot, weapon });
+  }
+
+  sendRespawn() {
+    return this.send('respawn');
+  }
+
+  disconnect() {
+    this.manualClose = true;
+    this.ws?.close();
+    this.ws = null;
+    this.connected = false;
+    this.room = null;
+  }
+}
