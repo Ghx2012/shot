@@ -379,6 +379,9 @@ const DICT = {
   '2.5× 精确半自动': '2.5× PRECISION SEMI-AUTO',
   '轻机枪 · 全自动': 'LMG · FULL AUTO',
   '重型半自动': 'HEAVY SEMI-AUTO',
+  '删除选中': 'DELETE SELECTED',
+  '暂无登录日志': 'NO LOGIN LOGS',
+  '没有可删除的日志': 'NO LOGS TO DELETE',
 };
 
 // 带参数的动态文本
@@ -397,6 +400,8 @@ const PATTERNS = [
   [/^失控者_(\d+)$/, 'ROGUE_$1'],
   [/^先到 (\d+) 杀 · 对手 (.+)$/, 'First to $1 kills · Opponent $2'],
   [/^(.+) · 回合奖励 \$(\d+)$/, '$1 · ROUND REWARD $2'],
+  [/^删除选中 \((\d+)\)$/, 'DELETE SELECTED ($1)'],
+  [/^已删除 (\d+) 条登录日志$/, 'DELETED $1 LOGIN LOGS'],
 ];
 
 const originalText = new WeakMap();

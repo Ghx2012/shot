@@ -104,6 +104,8 @@ export function createAccount(username, password) {
     outgoing: [],
     role: 'player',
     banned: false,
+    country: '',
+    region: '',
   };
   state.accounts[account.id] = account;
   scheduleSave();
@@ -139,7 +141,24 @@ export function getAccount(id) {
 
 export function publicAccount(account) {
   if (!account) return null;
-  return { id: account.id, username: account.username, avatar: account.avatar, role: account.role };
+  return {
+    id: account.id,
+    username: account.username,
+    avatar: account.avatar,
+    role: account.role,
+    country: account.country || '',
+  };
+}
+
+// 每次登录按所在时区更新国籍（同一账号换地方登录会随之变化）
+export function setAccountLocation(account, country, region = '') {
+  if (!account) return;
+  const nextCountry = String(country || '').slice(0, 2).toUpperCase() || 'UN';
+  const nextRegion = String(region || '').slice(0, 48);
+  if (account.country === nextCountry && account.region === nextRegion) return;
+  account.country = nextCountry;
+  account.region = nextRegion;
+  scheduleSave();
 }
 
 export function publicProfile(account, online = false) {
@@ -150,6 +169,8 @@ export function publicProfile(account, online = false) {
     username: account.username,
     avatar: account.avatar,
     role: account.role,
+    country: account.country || '',
+    region: account.region || '',
     createdAt: account.createdAt,
     online,
     stats: { ...stats },

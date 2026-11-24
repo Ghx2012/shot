@@ -859,6 +859,17 @@ function avatarLetter(profile) {
   return (profile?.username || 'P').trim().charAt(0).toUpperCase() || 'P';
 }
 
+function countryFlag(code) {
+  const value = String(code || '').toUpperCase();
+  if (!/^[A-Z]{2}$/.test(value) || value === 'UN') return '🌐';
+  return String.fromCodePoint(...[...value].map((char) => 0x1f1e6 + char.charCodeAt(0) - 65));
+}
+
+function countryText(code) {
+  const value = String(code || '').toUpperCase();
+  return /^[A-Z]{2}$/.test(value) && value !== 'UN' ? `${countryFlag(value)} ${value}` : '🌐 --';
+}
+
 function paintAvatar(element, profile) {
   if (!element) return;
   element.textContent = avatarLetter(profile);
@@ -1000,6 +1011,11 @@ function friendRow(friend, type) {
   meta.className = 'friend-meta';
   const name = document.createElement('strong');
   name.textContent = friend.username;
+  const flag = document.createElement('em');
+  flag.className = 'friend-country';
+  flag.textContent = countryFlag(friend.country);
+  flag.title = friend.country || '';
+  name.append(' ', flag);
   const status = document.createElement('small');
   if (type === 'incoming') {
     status.textContent = '请求添加你为好友';
@@ -1117,6 +1133,9 @@ function renderProfile(profile, isSelf) {
   const roleElement = $('profile-role');
   roleElement.textContent = profile.role === 'owner' ? '房主 / OWNER' : '干员 / OPERATIVE';
   roleElement.classList.toggle('owner', profile.role === 'owner');
+  const countryElement = $('profile-country');
+  countryElement.textContent = countryText(profile.country);
+  countryElement.title = profile.region || '';
   $('open-admin').classList.toggle('hidden', !(isSelf && profile.role === 'owner'));
   $('profile-matches').textContent = profile.stats?.matches || 0;
   $('profile-wins').textContent = profile.stats?.wins || 0;
@@ -1213,6 +1232,16 @@ function adminRow(name, meta, actions) {
   return row;
 }
 
+const selectedLogIds = new Set();
+
+function updateLogDeleteButton() {
+  const button = $('admin-log-delete');
+  if (!button) return;
+  const count = selectedLogIds.size;
+  button.disabled = count === 0;
+  button.textContent = count ? `删除选中 (${count})` : '删除选中';
+}
+
 function renderAdminState(message) {
   const stats = message.stats || {};
   const accountLimit = Math.max(1, Number(message.accountLimit) || 10000);
@@ -1298,6 +1327,12 @@ function renderAdminState(message) {
   logBox.innerHTML = '';
   const logs = message.loginLogs || [];
   $('admin-log-count').textContent = logs.length;
+  // 只保留当前列表里仍然存在的选中项
+  const visibleLogIds = new Set(logs.map((entry) => entry.id).filter(Boolean));
+  for (const id of [...selectedLogIds]) {
+    if (!visibleLogIds.has(id)) selectedLogIds.delete(id);
+  }
+  updateLogDeleteButton();
   if (!logs.length) {
     logBox.innerHTML = '<div class="admin-empty">暂无登录日志</div>';
   } else {
@@ -1305,6 +1340,17 @@ function renderAdminState(message) {
     for (const entry of logs) {
       const row = document.createElement('div');
       row.className = 'admin-log-row';
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.className = 'log-check';
+      check.checked = !!entry.id && selectedLogIds.has(entry.id);
+      check.disabled = !entry.id;
+      check.addEventListener('change', () => {
+        if (!entry.id) return;
+        if (check.checked) selectedLogIds.add(entry.id);
+        else selectedLogIds.delete(entry.id);
+        updateLogDeleteButton();
+      });
       const time = document.createElement('span');
       const date = new Date(entry.at);
       time.textContent = Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-CN', { hour12: false });
@@ -1321,7 +1367,7 @@ function renderAdminState(message) {
       reason.className = 'log-reason';
       reason.textContent = entry.reason || '';
       reason.title = entry.ua || '';
-      row.append(time, user, result, ip, reason);
+      row.append(check, time, user, result, ip, reason);
       logBox.appendChild(row);
     }
   }
@@ -1363,6 +1409,12 @@ $('admin-panel').addEventListener('click', (event) => {
   if (event.target === $('admin-panel')) hideAdminPanel();
 });
 $('admin-refresh').addEventListener('click', () => lobby.adminState());
+$('admin-log-delete').addEventListener('click', () => {
+  if (!selectedLogIds.size) return;
+  lobby.adminDeleteLogs([...selectedLogIds]);
+  selectedLogIds.clear();
+  updateLogDeleteButton();
+});
 function saveAccountLimit() {
   const value = Number($('admin-limit-input').value);
   if (!Number.isInteger(value) || value < 1 || value > 1000000) {

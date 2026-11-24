@@ -8,9 +8,10 @@ import { WebSocketServer } from 'ws';
 import {
   acceptFriend, changePassword, createAccount, declineFriend, ensureOwner, getAccount, getAccountLimit,
   listAccounts, publicAccount, publicProfile, recordMatch, removeFriend, requestFriend,
-  resetStats, setAccountLimit, setBanned, setAvatar, verifyAccount,
+  resetStats, setAccountLimit, setAccountLocation, setBanned, setAvatar, verifyAccount,
 } from './store.js';
-import { addLoginLog, listLoginLogs } from './logs.js';
+import { addLoginLog, deleteLoginLogs, listLoginLogs } from './logs.js';
+import { resolveCountry } from './geo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -472,6 +473,12 @@ function issueToken(account) {
   return token;
 }
 
+// 登录时按设备时区记录国籍，缺少定位信息的老客户端不会覆盖已有值
+function applyAccountLocation(account, message) {
+  if (!message.timezone && !message.language) return;
+  setAccountLocation(account, resolveCountry(message.timezone, message.language), message.timezone);
+}
+
 function bindAccount(client, account, token = null) {
   const previous = presence.get(account.id);
   if (previous && previous !== client) {
@@ -770,6 +777,7 @@ wss.on('connection', (ws, req) => {
         }
       }
       client.authAttempts = 0;
+      applyAccountLocation(result.account, message);
       bindAccount(client, result.account);
       return;
     }
@@ -806,6 +814,7 @@ wss.on('connection', (ws, req) => {
         sendFull(ws);
         return;
       }
+      applyAccountLocation(account, message);
       bindAccount(client, account, token);
       return;
     }
@@ -875,6 +884,16 @@ wss.on('connection', (ws, req) => {
       if (message.type === 'adminCloseRoom') {
         const ok = closeRoomByAdmin(String(message.room || '').toUpperCase());
         send(ws, { type: 'notice', message: ok ? '房间已关闭' : '房间不存在', level: ok ? '' : 'error' });
+        sendAdminState(ws);
+        return;
+      }
+      if (message.type === 'adminDeleteLogs') {
+        const removed = deleteLoginLogs(message.ids);
+        send(ws, {
+          type: 'notice',
+          message: removed ? `已删除 ${removed} 条登录日志` : '没有可删除的日志',
+          level: removed ? '' : 'error',
+        });
         sendAdminState(ws);
         return;
       }

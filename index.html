@@ -701,6 +701,7 @@
               <strong id="profile-name-large">—</strong>
               <span id="profile-online" class="profile-online">离线</span>
               <div id="profile-role" class="profile-role">OPERATIVE</div>
+              <span id="profile-country" class="profile-country">🌐 --</span>
               <div class="avatar-picker" id="avatar-picker"></div>
               <div class="profile-stat-grid">
                 <div><strong id="profile-matches">0</strong><span>对局</span></div>
@@ -824,7 +825,10 @@
               <div id="admin-accounts" class="admin-accounts"></div>
             </section>
             <section class="admin-section admin-log-section">
-              <h3>登录日志 <b id="admin-log-count">0</b></h3>
+              <div class="admin-log-head">
+                <h3>登录日志 <b id="admin-log-count">0</b></h3>
+                <button id="admin-log-delete" class="log-delete-button" type="button" disabled>删除选中</button>
+              </div>
               <div id="admin-login-log" class="admin-logs"></div>
             </section>
             <div class="admin-announce">

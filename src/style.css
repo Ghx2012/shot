@@ -835,6 +835,8 @@ kbd { font: inherit; color: #c5cec9; padding: 4px 6px; margin-right: 5px; border
 @media (max-width: 620px) { .login-features { grid-template-columns: 1fr; } .login-visual { padding: 2vh 0; } .login-headline h1 { font-size: 40px; } .profile-panel { width: calc(100vw - 20px); } .friend-row { grid-template-columns: 30px minmax(0, 1fr); } .friend-actions { grid-column: 1 / -1; justify-content: flex-end; } }
 
 /* ---------- owner / admin ---------- */
+.profile-country { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 3px 8px; border: 1px solid var(--line); background: rgba(0,0,0,.2); color: #c8d3cc; font-family: Inter, sans-serif; font-size: 9px; letter-spacing: 1px; }
+.friend-country { font-style: normal; margin-left: 4px; font-size: 10px; opacity: .85; }
 .profile-role { padding: 3px 10px; border: 1px solid var(--line); color: #8d9a94; font-size: 9px; letter-spacing: 2px; }
 .profile-role.owner { border-color: rgba(200,255,82,.5); color: var(--lime); background: rgba(200,255,82,.07); box-shadow: 0 0 18px rgba(200,255,82,.12); }
 .admin-panel { width: min(1080px, calc(100vw - 40px)); max-height: 90vh; display: flex; flex-direction: column; background: linear-gradient(180deg, rgba(13,18,19,.99), rgba(7,10,11,.99)); border: 1px solid var(--line); box-shadow: 0 30px 90px rgba(0,0,0,.6); }
@@ -879,8 +881,14 @@ kbd { font: inherit; color: #c5cec9; padding: 4px 6px; margin-right: 5px; border
 @media (max-width: 800px) { .admin-limit-form input { width: 130px; } }
 
 .admin-log-section { margin-top: 12px; }
+.admin-log-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.admin-log-head h3 { margin: 0; }
+.log-delete-button { padding: 5px 10px; background: transparent; border: 1px solid #6b3a35; color: #ff8a80; font-size: 9px; letter-spacing: 1px; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.log-delete-button:hover:not(:disabled) { border-color: var(--red); color: #fff; background: rgba(255,93,82,.18); }
+.log-delete-button:disabled { opacity: .35; cursor: not-allowed; }
 .admin-logs { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
-.admin-log-row { display: grid; grid-template-columns: 132px 110px 60px 120px minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 9px; border: 1px solid var(--line); background: rgba(0,0,0,.18); font-size: 9px; color: #9aa59f; }
+.admin-log-row { display: grid; grid-template-columns: 16px 132px 110px 60px 120px minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 9px; border: 1px solid var(--line); background: rgba(0,0,0,.18); font-size: 9px; color: #9aa59f; }
+.admin-log-row .log-check { width: 13px; height: 13px; margin: 0; accent-color: var(--lime); cursor: pointer; }
 .admin-log-row .log-user { color: #e6efe9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-log-row .log-result { text-align: center; padding: 2px 4px; border: 1px solid var(--line); font-size: 8px; letter-spacing: .5px; }
 .admin-log-row .log-result.success, .admin-log-row .log-result.session { color: var(--lime); border-color: rgba(200,255,82,.3); }
@@ -889,7 +897,7 @@ kbd { font: inherit; color: #c5cec9; padding: 4px 6px; margin-right: 5px; border
 .admin-log-row .log-result.banned { color: var(--red); border-color: rgba(255,93,82,.3); }
 .admin-log-row .log-ip { color: #7c8882; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-log-row .log-reason { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 800px) { .admin-log-row { grid-template-columns: 1fr 1fr 1fr; } .admin-log-row .log-reason { grid-column: 1 / -1; } }
+@media (max-width: 800px) { .admin-log-row { grid-template-columns: 16px 1fr 1fr 1fr; } .admin-log-row .log-reason { grid-column: 2 / -1; } }
 
 /* ---------- mobile / tablet touch adaptation ---------- */
 html, body { overscroll-behavior: none; }

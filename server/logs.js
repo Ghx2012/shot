@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +13,15 @@ function load() {
     const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
     return lines.slice(-MAX_ENTRIES).map((line) => {
       try {
-        return JSON.parse(line);
+        const entry = JSON.parse(line);
+        // 旧日志没有 id，用稳定摘要补一个，保证可被选中删除
+        if (!entry.id) {
+          entry.id = crypto.createHash('sha1')
+            .update(`${entry.at}|${entry.username}|${entry.ip}|${entry.result}|${entry.reason}`)
+            .digest('hex')
+            .slice(0, 16);
+        }
+        return entry;
       } catch {
         return null;
       }
@@ -23,6 +32,15 @@ function load() {
 }
 
 const entries = load();
+
+function persist() {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join('\n') + (entries.length ? '\n' : ''));
+  } catch {
+    // 日志写入失败不影响登录
+  }
+}
 
 function rotateIfNeeded() {
   try {
@@ -36,6 +54,7 @@ function rotateIfNeeded() {
 
 export function addLoginLog(entry) {
   const record = {
+    id: crypto.randomBytes(8).toString('hex'),
     at: new Date().toISOString(),
     username: String(entry.username || '').slice(0, 16),
     accountId: entry.accountId || '',
@@ -58,4 +77,17 @@ export function addLoginLog(entry) {
 export function listLoginLogs(limit = 80) {
   const count = Math.max(1, Math.min(500, Number(limit) || 80));
   return entries.slice(-count).reverse();
+}
+
+// 删除指定 id 的登录日志，返回实际删除条数
+export function deleteLoginLogs(ids) {
+  const targets = new Set((Array.isArray(ids) ? ids : []).map((id) => String(id)).slice(0, 200));
+  if (!targets.size) return 0;
+  const before = entries.length;
+  const kept = entries.filter((entry) => !targets.has(entry.id));
+  if (kept.length === before) return 0;
+  entries.length = 0;
+  entries.push(...kept);
+  persist();
+  return before - kept.length;
 }

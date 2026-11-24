@@ -8,6 +8,17 @@ const defaultUrl = () => {
   return `${protocol}//${location.host}/ws`;
 };
 
+// 登录时附带设备时区与语言，服务端据此记录国籍
+function clientLocation() {
+  let timezone = '';
+  try {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  } catch {
+    timezone = '';
+  }
+  return { timezone, language: navigator.language || '' };
+}
+
 export class LobbyClient {
   constructor(url = import.meta.env.VITE_WS_URL || defaultUrl()) {
     this.url = url;
@@ -95,15 +106,15 @@ export class LobbyClient {
   }
 
   registerAccount(username, password) {
-    return this.send('register', { username, password });
+    return this.send('register', { username, password, ...clientLocation() });
   }
 
   loginAccount(username, password) {
-    return this.send('login', { username, password });
+    return this.send('login', { username, password, ...clientLocation() });
   }
 
   authToken(token) {
-    return this.send('auth', { token });
+    return this.send('auth', { token, ...clientLocation() });
   }
 
   logoutAccount() {
@@ -148,6 +159,10 @@ export class LobbyClient {
 
   adminSetAccountLimit(limit) {
     return this.send('adminSetAccountLimit', { limit });
+  }
+
+  adminDeleteLogs(ids) {
+    return this.send('adminDeleteLogs', { ids: Array.isArray(ids) ? ids : [] });
   }
 
   addFriend(username) {
