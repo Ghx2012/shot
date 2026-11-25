@@ -5765,8 +5765,11 @@ export class TacticalGame {
     if (next === this.operativeForm) return;
     this.operativeForm = next;
     if (!this.playerAvatar) return;
-    this.scene.remove(this.playerAvatar.group);
+    // 切换体型会重建干员模型，旧模型的克隆材质需要释放，几何体与模板共享不能销毁
     this.playerAvatar.mixer?.stopAllAction();
+    this.playerAvatar.mixer?.uncacheRoot(this.playerAvatar.group);
+    this.disposeObject3D(this.playerAvatar.group);
+    this.scene.remove(this.playerAvatar.group);
     this.playerAvatar = null;
     this.buildPlayerAvatar();
   }
@@ -7378,6 +7381,7 @@ export class TacticalGame {
       if (node.isMesh || node.isSkinnedMesh) {
         node.castShadow = true;
         node.receiveShadow = true;
+        node.userData.sharedGeometry = true;
         const tint = (material) => {
           const next = material.clone();
           const joints = /joint/i.test(material.name);

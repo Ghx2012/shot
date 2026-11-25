@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import {
@@ -43,6 +44,62 @@ const mime = {
   '.svg': 'image/svg+xml',
   '.mp4': 'video/mp4',
 };
+
+// 静态资源缓存：避免每次请求都同步读取整个文件（7.7MB 角色模型会阻塞事件循环）
+// 文本类资源首次读取时压缩并缓存，后续直接复用，带 ETag 支持 304
+const staticCache = new Map();
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.svg', '.gltf']);
+const MAX_CACHE_BYTES = 24 * 1024 * 1024;
+
+function serveStatic(req, res, file, pathname) {
+  let stat;
+  try {
+    stat = fs.statSync(file);
+  } catch {
+    res.writeHead(404);
+    res.end('Client build not found. Run: npm run build');
+    return;
+  }
+  const ext = path.extname(file);
+  const etag = `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
+  const isHashedAsset = pathname.startsWith('/assets/');
+  const cacheControl = ext === '.html'
+    ? 'no-cache'
+    : isHashedAsset ? 'public, max-age=31536000, immutable' : 'public, max-age=86400';
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, { ETag: etag, 'Cache-Control': cacheControl });
+    res.end();
+    return;
+  }
+  let entry = staticCache.get(file);
+  if (!entry || entry.mtimeMs !== stat.mtimeMs) {
+    const data = fs.readFileSync(file);
+    entry = { mtimeMs: stat.mtimeMs, type: mime[ext] || 'application/octet-stream', data, gzip: null };
+    if (COMPRESSIBLE.has(ext) && data.length > 1024) {
+      entry.gzip = zlib.gzipSync(data, { level: 6 });
+    }
+    if (data.length > MAX_CACHE_BYTES) {
+      staticCache.delete(file);
+    } else {
+      if (staticCache.size >= 64) staticCache.clear();
+      staticCache.set(file, entry);
+    }
+  }
+  const acceptGzip = String(req.headers['accept-encoding'] || '').includes('gzip');
+  const body = acceptGzip && entry.gzip ? entry.gzip : entry.data;
+  const headers = {
+    'Content-Type': entry.type,
+    'Content-Length': body.length,
+    'Cache-Control': cacheControl,
+    ETag: etag,
+  };
+  if (acceptGzip && entry.gzip) {
+    headers['Content-Encoding'] = 'gzip';
+    headers.Vary = 'Accept-Encoding';
+  }
+  res.writeHead(200, headers);
+  res.end(body);
+}
 
 const server = http.createServer((req, res) => {
   let pathname = '/index.html';
@@ -88,18 +145,12 @@ const server = http.createServer((req, res) => {
     res.end('Forbidden');
     return;
   }
-  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(dist, 'index.html');
   try {
-    const data = fs.readFileSync(file);
-    res.writeHead(200, {
-      'Content-Type': mime[path.extname(file)] || 'application/octet-stream',
-      'Cache-Control': 'no-cache',
-    });
-    res.end(data);
+    if (fs.statSync(file).isDirectory()) file = path.join(dist, 'index.html');
   } catch {
-    res.writeHead(404);
-    res.end('Client build not found. Run: npm run build');
+    file = path.join(dist, 'index.html');
   }
+  serveStatic(req, res, file, pathname);
 });
 
 const wss = new WebSocketServer({ server, maxPayload: 8 * 1024 });
@@ -228,6 +279,11 @@ function send(ws, payload) {
   if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload));
 }
 
+// 广播时只序列化一次，避免同一份快照为每个接收者重复生成 JSON
+function sendRaw(ws, text) {
+  if (ws && ws.readyState === ws.OPEN) ws.send(text);
+}
+
 function sendFull(ws) {
   send(ws, { type: 'authError', message: `服务器在线人数已满（${MAX_ONLINE} 人），请稍后再试` });
 }
@@ -245,7 +301,8 @@ function isOwner(client) {
 }
 
 function broadcastAll(payload) {
-  for (const socket of sockets.values()) send(socket.ws, payload);
+  const text = JSON.stringify(payload);
+  for (const socket of sockets.values()) sendRaw(socket.ws, text);
 }
 
 function adminStatePayload() {
@@ -336,15 +393,16 @@ function closeRoomByAdmin(roomId, reason = '房间已被房主关闭') {
 }
 
 function broadcastRoom(room, payload, exceptId = null) {
+  const text = JSON.stringify(payload);
   for (const player of room.players.values()) {
     if (player.id === exceptId) continue;
-    send(player.ws, payload);
+    sendRaw(player.ws, text);
   }
 }
 
 function broadcastRooms() {
-  const payload = { type: 'rooms', rooms: roomList() };
-  for (const socket of sockets.values()) send(socket.ws, payload);
+  const text = JSON.stringify({ type: 'rooms', rooms: roomList() });
+  for (const socket of sockets.values()) sendRaw(socket.ws, text);
 }
 
 function sendRoom(room) {
