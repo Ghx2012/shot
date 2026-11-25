@@ -5968,6 +5968,12 @@ export class TacticalGame {
 
   pollGamepad(dt) {
     if (typeof navigator === 'undefined' || !navigator.getGamepads) return;
+    // 未连接手柄时降低轮询频率：getGamepads() 每帧都会生成快照数组，纯键鼠玩家无需承担这份开销
+    if (!this.gamepad.connected) {
+      this.gamepadPollTimer = (this.gamepadPollTimer || 0) - dt;
+      if (this.gamepadPollTimer > 0) return;
+      this.gamepadPollTimer = 0.5;
+    }
     const pads = navigator.getGamepads();
     let pad = this.gamepad.index !== null ? pads[this.gamepad.index] : null;
     if (!pad || !pad.connected) {
@@ -6230,6 +6236,9 @@ export class TacticalGame {
   }
 
   bindEvents() {
+    // 手柄插拔后立刻恢复高频轮询，避免节流造成识别延迟
+    addEventListener('gamepadconnected', () => { this.gamepadPollTimer = 0; });
+    addEventListener('gamepaddisconnected', () => { this.gamepadPollTimer = 0; });
     addEventListener('resize', () => {
       this.camera.aspect = innerWidth / innerHeight;
       this.camera.updateProjectionMatrix();
@@ -6700,15 +6709,19 @@ export class TacticalGame {
     this.scene.remove(enemy.group);
   }
 
+  // 释放单个远程玩家：模型材质、名字贴图与枪械都是按人克隆的，不释放会在反复进出房间时持续占用显存
+  disposeRemotePlayer(remote) {
+    if (!remote) return;
+    remote.mixer?.stopAllAction();
+    remote.mixer?.uncacheRoot(remote.group);
+    remote.nameTag?.material?.map?.dispose();
+    remote.nameTag?.material?.dispose();
+    this.disposeObject3D(remote.group);
+    this.scene.remove(remote.group);
+  }
+
   clearRemotePlayers() {
-    for (const remote of this.remotePlayers.values()) {
-      remote.mixer?.stopAllAction();
-      remote.mixer?.uncacheRoot(remote.group);
-      remote.nameTag?.material?.map?.dispose();
-      remote.nameTag?.material?.dispose();
-      this.disposeObject3D(remote.group);
-      this.scene.remove(remote.group);
-    }
+    for (const remote of this.remotePlayers.values()) this.disposeRemotePlayer(remote);
     this.remotePlayers.clear();
   }
 
@@ -6947,7 +6960,12 @@ export class TacticalGame {
     }
     if (this.player.dead) {
       const remaining = Math.max(0, this.player.respawnAt - this.time);
-      $('respawn-timer').textContent = remaining.toFixed(1);
+      // 只在显示的 0.1 秒变化时写 DOM，避免复活等待期间每帧生成字符串
+      const tenths = Math.ceil(remaining * 10);
+      if (tenths !== this.respawnTenths) {
+        this.respawnTenths = tenths;
+        $('respawn-timer').textContent = (tenths / 10).toFixed(1);
+      }
       if (this.mode === 'brawl' && remaining <= 0) this.respawnPlayer();
       if (this.mode === 'online' && this.time > this.player.respawnAt + 2.5) this.respawnPlayer();
     }
@@ -7026,9 +7044,7 @@ export class TacticalGame {
     }
     for (const id of [...this.remotePlayers.keys()]) {
       if (seen.has(id)) continue;
-      const remote = this.remotePlayers.get(id);
-      remote?.mixer?.stopAllAction();
-      if (remote) this.scene.remove(remote.group);
+      this.disposeRemotePlayer(this.remotePlayers.get(id));
       this.remotePlayers.delete(id);
     }
   }
@@ -7920,6 +7936,7 @@ export class TacticalGame {
     $('crosshair').classList.add('hidden');
     $('respawn-overlay').classList.remove('hidden');
     $('respawn-timer').textContent = '3.0';
+    this.respawnTenths = 30;
     $('respawn-killer').textContent = killerName
       ? `被 ${killerName} 击倒`
       : this.mode === 'online' ? '等待服务器复活' : '正在返回战场';
@@ -9429,21 +9446,27 @@ export class TacticalGame {
     this.muzzleLight.intensity = Math.max(0, this.muzzleLight.intensity - dt * 180);
     const baseGap = this.currentWeapon === 'shotgun' ? 9 : 4;
     const gap = baseGap + this.bloom * 650 + this.player.speed * 0.85 + (this.player.grounded ? 0 : 4);
+    // 缓存准星与换弹进度节点，避免每帧重复查询
+    if (!this.crosshairEl) {
+      this.crosshairEl = $('crosshair');
+      this.reloadTrackEl = $('reload-track');
+      this.reloadFillEl = $('reload-fill');
+    }
     this.crosshairUiTimer = Math.max(0, this.crosshairUiTimer - dt);
     if (this.crosshairUiTimer <= 0 && Math.abs(gap - this.lastCrosshairGap) > 0.4) {
       this.lastCrosshairGap = gap;
       this.crosshairUiTimer = 0.05;
-      $('crosshair').style.setProperty('--gap', `${gap}px`);
+      this.crosshairEl.style.setProperty('--gap', `${gap}px`);
     }
     const crosshairOpacity = knife ? '0.45' : '1';
-    if ($('crosshair').style.opacity !== crosshairOpacity) $('crosshair').style.opacity = crosshairOpacity;
-    const reloadTrack = $('reload-track');
+    if (this.crosshairEl.style.opacity !== crosshairOpacity) this.crosshairEl.style.opacity = crosshairOpacity;
+    const reloadTrack = this.reloadTrackEl;
     const showReload = this.reloading && !weapon.melee;
     if (showReload !== reloadTrack.classList.contains('active')) reloadTrack.classList.toggle('active', showReload);
     if (showReload) {
       const reloadDuration = weapon.shellReload ? weapon.shellTime : weapon.reload;
       const progress = clamp((this.time - this.reloadStart) / reloadDuration, 0, 1);
-      $('reload-fill').style.transform = `scaleX(${progress.toFixed(3)})`;
+      this.reloadFillEl.style.transform = `scaleX(${progress.toFixed(3)})`;
     }
   }
 
