@@ -2005,6 +2005,12 @@ export class TacticalGame {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // 屏幕空间环境光遮蔽：强化物体接触阴影与缝隙暗部
     this.gtaoPass = new GTAOPass(this.scene, this.camera, innerWidth, innerHeight);
+    // AO 是低频效果，按半分辨率计算再放大合成，GPU 开销约降到四分之一，画质差异很小
+    const gtaoSetSize = this.gtaoPass.setSize.bind(this.gtaoPass);
+    this.gtaoPass.setSize = (width, height) => gtaoSetSize(
+      Math.max(1, Math.round(width * 0.5)),
+      Math.max(1, Math.round(height * 0.5)),
+    );
     this.gtaoPass.output = GTAOPass.OUTPUT.Default;
     this.gtaoPass.blendIntensity = 0.65;
     this.gtaoPass.updateGtaoMaterial({
@@ -7875,7 +7881,7 @@ export class TacticalGame {
       remote.group.visible = true;
       const dx = remote.target.x - remote.group.position.x;
       const dz = remote.target.z - remote.group.position.z;
-      const distance = Math.hypot(dx, dz);
+      const distance = Math.sqrt(dx * dx + dz * dz);
       if (distance > 6) {
         remote.group.position.copy(remote.target);
         remote.group.rotation.y = remote.yaw + Math.PI;
@@ -8805,7 +8811,10 @@ export class TacticalGame {
   }
 
   applyGroundFriction(dt) {
-    const speed = Math.hypot(this.player.velocity.x, this.player.velocity.z);
+    // Math.hypot 在 V8 中明显慢于手动开方，这里属于每帧热路径
+    const vx = this.player.velocity.x;
+    const vz = this.player.velocity.z;
+    const speed = Math.sqrt(vx * vx + vz * vz);
     if (speed < 0.001) {
       this.player.velocity.x = 0;
       this.player.velocity.z = 0;
@@ -8889,7 +8898,7 @@ export class TacticalGame {
     if (Math.abs(moveX) > 0.01) wish.addScaledVector(right, moveX);
     if (wish.lengthSq() > 0) wish.normalize();
     const strafe = moveX;
-    const moveAmount = Math.min(1, Math.hypot(moveX, moveY));
+    const moveAmount = Math.min(1, Math.sqrt(moveX * moveX + moveY * moveY));
     this.player.crouched = !!this.keys.ControlLeft || !!this.keys.ControlRight || !!this.keys.KeyC || this.touchState.crouch || this.gamepad.crouch;
     const weaponSpeed = this.weaponConfigs[this.currentWeapon]?.speed || 1;
     let targetSpeed = (this.player.crouched ? 2.15 : this.keys.ShiftLeft ? 3.05 : 5.7) * weaponSpeed * moveAmount;
@@ -8900,7 +8909,7 @@ export class TacticalGame {
     } else {
       this.accelerateMove(wish, Math.min(targetSpeed, 0.75), 11.5, dt);
     }
-    this.player.speed = Math.hypot(this.player.velocity.x, this.player.velocity.z);
+    this.player.speed = Math.sqrt(this.player.velocity.x ** 2 + this.player.velocity.z ** 2);
     if (this.player.grounded && this.player.speed > 0.6) {
       this.stepDistance += this.player.speed * dt;
       const stride = this.player.crouched ? 1.25 : this.keys.ShiftLeft ? 1.5 : 1.65;

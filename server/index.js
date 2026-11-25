@@ -46,9 +46,9 @@ const mime = {
 };
 
 // 静态资源缓存：避免每次请求都同步读取整个文件（7.7MB 角色模型会阻塞事件循环）
-// 文本类资源首次读取时压缩并缓存，后续直接复用，带 ETag 支持 304
+// 文本与模型首次读取时压缩并缓存，后续直接复用，带 ETag 支持 304
 const staticCache = new Map();
-const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.svg', '.gltf']);
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.svg', '.gltf', '.glb', '.bin']);
 const MAX_CACHE_BYTES = 24 * 1024 * 1024;
 
 function serveStatic(req, res, file, pathname) {
@@ -74,9 +74,16 @@ function serveStatic(req, res, file, pathname) {
   let entry = staticCache.get(file);
   if (!entry || entry.mtimeMs !== stat.mtimeMs) {
     const data = fs.readFileSync(file);
-    entry = { mtimeMs: stat.mtimeMs, type: mime[ext] || 'application/octet-stream', data, gzip: null };
+    entry = { mtimeMs: stat.mtimeMs, type: mime[ext] || 'application/octet-stream', data, gzip: null, gzipJob: null };
     if (COMPRESSIBLE.has(ext) && data.length > 1024) {
-      entry.gzip = zlib.gzipSync(data, { level: 6 });
+      // 用异步线程池压缩，避免大模型压缩时阻塞其它请求与联机心跳
+      entry.gzipJob = new Promise((resolve) => {
+        zlib.gzip(data, { level: 6 }, (error, buffer) => {
+          entry.gzip = error ? null : buffer;
+          entry.gzipJob = null;
+          resolve();
+        });
+      });
     }
     if (data.length > MAX_CACHE_BYTES) {
       staticCache.delete(file);
@@ -86,19 +93,27 @@ function serveStatic(req, res, file, pathname) {
     }
   }
   const acceptGzip = String(req.headers['accept-encoding'] || '').includes('gzip');
-  const body = acceptGzip && entry.gzip ? entry.gzip : entry.data;
-  const headers = {
-    'Content-Type': entry.type,
-    'Content-Length': body.length,
-    'Cache-Control': cacheControl,
-    ETag: etag,
+  const respond = () => {
+    const body = acceptGzip && entry.gzip ? entry.gzip : entry.data;
+    const headers = {
+      'Content-Type': entry.type,
+      'Content-Length': body.length,
+      'Cache-Control': cacheControl,
+      ETag: etag,
+    };
+    if (acceptGzip && entry.gzip) {
+      headers['Content-Encoding'] = 'gzip';
+      headers.Vary = 'Accept-Encoding';
+    }
+    res.writeHead(200, headers);
+    res.end(body);
   };
-  if (acceptGzip && entry.gzip) {
-    headers['Content-Encoding'] = 'gzip';
-    headers.Vary = 'Accept-Encoding';
+  // 首次请求时压缩尚未完成：等压缩结束再返回，避免客户端下载未压缩的大模型
+  if (acceptGzip && COMPRESSIBLE.has(ext) && !entry.gzip && entry.gzipJob) {
+    entry.gzipJob.then(respond);
+    return;
   }
-  res.writeHead(200, headers);
-  res.end(body);
+  respond();
 }
 
 const server = http.createServer((req, res) => {

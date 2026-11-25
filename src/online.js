@@ -1,8 +1,12 @@
 const defaultUrl = () => {
+  // 支持 ?ws=wss://host/ws 手动指定联机地址（静态托管与联机服务分离时使用）
+  const override = new URLSearchParams(location.search).get('ws');
+  if (override) return override;
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const port = location.port;
-  // 本地开发/预览端口直接连接独立联机服务；线上与 Node 托管环境使用同源 /ws
-  if (port && port !== '80' && port !== '443' && port !== '8787') {
+  // 仅 Vite 开发/预览端口需要连到独立的联机服务；其余端口（含自建部署）一律使用同源 /ws
+  const devPorts = ['5173', '5174', '4173', '4174'];
+  if (devPorts.includes(port)) {
     return `${protocol}//${location.hostname}:8787`;
   }
   return `${protocol}//${location.host}/ws`;
