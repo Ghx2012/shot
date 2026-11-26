@@ -29,6 +29,7 @@ const BRAWL_SPAWN_POINTS = [
   [-24, 27], [24, 27], [-12, 0], [12, 0], [-14, -33], [12, -33],
   [-4, 14], [7, 27], [-4, -30], [4, -20], [22, -8], [-22, -8],
 ];
+const MINIMAP_PICKUP_COLORS = { medkit: '#7dff9a', armor: '#6ec8ff', ammo: '#ffc24a', grenade: '#ff9a4a' };
 
 const EXTERNAL_WEAPON_MODELS = {
   rifle: {
@@ -609,8 +610,8 @@ export class TacticalGame {
       screen: new THREE.MeshStandardMaterial({ color: 0xc8ff52, emissive: 0xc8ff52, emissiveIntensity: 1.1, roughness: 0.25, metalness: 0.35 }),
     };
     this.buildWorld();
+    this.buildColliderGrid();
     this.buildWeapons();
-    this.loadExternalWeaponModels();
     this.bindEvents();
     this.setMenuCamera();
     this.character = { ready: false, template: null, clips: {}, failed: false };
@@ -620,6 +621,8 @@ export class TacticalGame {
   }
 
   loadExternalWeaponModels() {
+    if (this.weaponModelsLoading) return;
+    this.weaponModelsLoading = true;
     const loader = new GLTFLoader();
 
     Object.entries(EXTERNAL_WEAPON_MODELS).forEach(([name, config]) => {
@@ -919,10 +922,13 @@ export class TacticalGame {
       this.upgradeBoxEnemies();
       this.upgradeBoxRemotes();
       this.schedulePrewarm(400);
+      // 干员模型（加载遮罩等待的主资源）就绪后再拉取枪械模型，避免并发抢占带宽
+      this.loadExternalWeaponModels();
       finish();
     }, undefined, () => {
       clearTimeout(fallback);
       this.character.failed = true;
+      this.loadExternalWeaponModels();
       finish();
     });
   }
@@ -2857,16 +2863,23 @@ export class TacticalGame {
     upper.castShadow = true;
     upper.receiveShadow = true;
     upper.raycast = () => {};
+    // 静态装饰：标为静态后可参与合批，减少绘制调用
+    upper.matrixAutoUpdate = false;
+    upper.updateMatrix();
     this.scene.add(upper);
     const band = new THREE.Mesh(new THREE.BoxGeometry(width + 0.03, 0.2, depth * 0.62 + 0.03), this.materials.hazard);
     band.position.set(x, height - 0.18, z);
     band.receiveShadow = true;
     band.raycast = () => {};
+    band.matrixAutoUpdate = false;
+    band.updateMatrix();
     this.scene.add(band);
     for (const side of [-1, 1]) {
       const foot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.12, depth + 0.12), this.materials.metalDark);
       foot.position.set(x + side * (width / 2 - 0.2), 0.06, z);
       foot.raycast = () => {};
+      foot.matrixAutoUpdate = false;
+      foot.updateMatrix();
       this.scene.add(foot);
     }
   }
@@ -2884,18 +2897,25 @@ export class TacticalGame {
       body.position.set(x, 0.475, z);
       body.castShadow = true;
       body.receiveShadow = true;
+      body.matrixAutoUpdate = false;
+      body.updateMatrix();
       this.scene.add(body);
       this.solids.push(body);
       this.colliders.push({ minX: x - 0.34, maxX: x + 0.34, minZ: z - 0.34, maxZ: z + 0.34 });
+      // 桶箍与桶盖只做视觉，标为静态后可被合批，避免为每个细节单独出一次绘制
       for (const y of [-0.235, 0.235]) {
         const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.352, 0.352, 0.055, 14), this.materials.metalDark);
         ring.position.y = y;
         ring.raycast = () => {};
+        ring.matrixAutoUpdate = false;
+        ring.updateMatrix();
         body.add(ring);
       }
       const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.345, 0.345, 0.03, 14), this.materials.metalDark);
       lid.position.y = 0.48;
       lid.raycast = () => {};
+      lid.matrixAutoUpdate = false;
+      lid.updateMatrix();
       body.add(lid);
     };
     barrel(-14.4, 3.8, this.materials.containerRed);
@@ -4600,13 +4620,17 @@ export class TacticalGame {
     const radius = 5.8;
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
-      const distance = Math.hypot(enemy.group.position.x - origin.x, enemy.group.position.z - origin.z);
+      const dx = enemy.group.position.x - origin.x;
+      const dz = enemy.group.position.z - origin.z;
+      const distance = Math.sqrt(dx * dx + dz * dz);
       if (distance > radius) continue;
       const damage = 150 * Math.pow(1 - distance / radius, 1.2);
       this.damageEnemy(enemy, damage, false, true, '破片手雷');
     }
     this.audio.explosion();
-    const blastDistance = Math.hypot(this.player.position.x - origin.x, this.player.position.z - origin.z);
+    const blastX = this.player.position.x - origin.x;
+    const blastZ = this.player.position.z - origin.z;
+    const blastDistance = Math.sqrt(blastX * blastX + blastZ * blastZ);
     if (blastDistance < 14) {
       const blast = Math.pow(1 - blastDistance / 14, 1.5);
       this.cameraShake = Math.max(this.cameraShake, blast * 1.9);
@@ -5846,6 +5870,19 @@ export class TacticalGame {
     if (this.smaaPass) this.smaaPass.enabled = this.quality !== 'low';
     this.usePost = this.quality !== 'low';
     const lowQuality = this.quality === 'low';
+    // 流畅模式改用更便宜的软阴影采样算法，弱机型阴影开销明显下降
+    const shadowType = lowQuality ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    if (this.renderer.shadowMap.type !== shadowType) {
+      this.renderer.shadowMap.type = shadowType;
+      // 阴影过滤器变化需要重编译材质着色器
+      this.scene.traverse((object) => {
+        if (!object.isMesh && !object.isSkinnedMesh) return;
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of materials) {
+          if (material) material.needsUpdate = true;
+        }
+      });
+    }
     if (this.sunLight) {
       const shadowSize = lowQuality ? 1024 : 2048;
       if (this.sunLight.shadow.mapSize.x !== shadowSize) {
@@ -8113,27 +8150,45 @@ export class TacticalGame {
   }
 
   isSpawnBlocked(x, z, margin = 0.8) {
-    return this.colliders.some((box) => (
-      x > box.minX - margin && x < box.maxX + margin
-      && z > box.minZ - margin && z < box.maxZ + margin
-    ));
+    return this.hasCollision(x - margin, x + margin, z - margin, z + margin);
   }
 
   pickBrawlSpawnPoint(avoid = null, minPlayerDistance = 14, minEnemyDistance = 6, reserved = []) {
-    const candidates = BRAWL_SPAWN_POINTS.filter(([x, z]) => {
-      if (Math.hypot(x - this.player.position.x, z - this.player.position.z) < minPlayerDistance) return false;
+    // 平方距离两趟筛选，避免 filter/hypot 与候选数组分配
+    const player = this.player.position;
+    const playerDistance2 = minPlayerDistance * minPlayerDistance;
+    const enemyDistance2 = minEnemyDistance * minEnemyDistance;
+    const isCandidate = ([x, z]) => {
+      const pdx = x - player.x;
+      const pdz = z - player.z;
+      if (pdx * pdx + pdz * pdz < playerDistance2) return false;
       if (this.isSpawnBlocked(x, z)) return false;
       for (const [rx, rz] of reserved) {
-        if (Math.hypot(x - rx, z - rz) < minEnemyDistance) return false;
+        const dx = x - rx;
+        const dz = z - rz;
+        if (dx * dx + dz * dz < enemyDistance2) return false;
       }
       for (const enemy of this.enemies) {
         if (!enemy.alive || enemy === avoid) continue;
-        if (Math.hypot(x - enemy.group.position.x, z - enemy.group.position.z) < minEnemyDistance) return false;
+        const dx = x - enemy.group.position.x;
+        const dz = z - enemy.group.position.z;
+        if (dx * dx + dz * dz < enemyDistance2) return false;
       }
       return true;
-    });
-    const pool = candidates.length ? candidates : BRAWL_SPAWN_POINTS;
-    const [x, z] = pool[Math.floor(Math.random() * pool.length)];
+    };
+    let count = 0;
+    for (const point of BRAWL_SPAWN_POINTS) if (isCandidate(point)) count++;
+    let x = 0;
+    let z = 0;
+    if (count) {
+      let index = Math.floor(Math.random() * count);
+      for (const point of BRAWL_SPAWN_POINTS) {
+        if (!isCandidate(point)) continue;
+        if (index-- === 0) { [x, z] = point; break; }
+      }
+    } else {
+      [x, z] = BRAWL_SPAWN_POINTS[Math.floor(Math.random() * BRAWL_SPAWN_POINTS.length)];
+    }
     return new THREE.Vector3(
       x + (Math.random() - 0.5) * 2,
       0,
@@ -8561,18 +8616,16 @@ export class TacticalGame {
     }
     const bodyDamage = stab ? weapon.damage * 1.7 : weapon.damage;
     const headDamage = stab ? weapon.headDamage * 1.5 : weapon.headDamage;
-    const direction = new THREE.Vector3();
+    const direction = this.meleeDirection || (this.meleeDirection = new THREE.Vector3());
     this.camera.getWorldDirection(direction);
     this.raycaster.set(this.camera.position, direction);
     this.raycaster.far = 2.35;
     const targets = this.shotTargets;
     targets.length = 0;
     for (const solid of this.solids) targets.push(solid);
-    this.enemies.filter((enemy) => enemy.alive).forEach((enemy) => targets.push(enemy.group));
+    for (const enemy of this.enemies) if (enemy.alive) targets.push(enemy.group);
     if (this.mode === 'online') {
-      this.remotePlayers.forEach((remote) => {
-        if (remote.alive) targets.push(remote.group);
-      });
+      for (const remote of this.remotePlayers.values()) if (remote.alive) targets.push(remote.group);
     }
     const hit = this.raycaster.intersectObjects(targets, true)[0];
     const remoteId = hit?.object.userData.remoteId;
@@ -8731,7 +8784,9 @@ export class TacticalGame {
   createImpact(point, normal, object) {
     if (normal) {
       this.ensureBulletHoles();
-      const worldNormal = normal.clone().transformDirection(object.matrixWorld);
+      // 复用临时向量，避免每次命中都克隆一个 Vector3
+      this.impactNormal = this.impactNormal || new THREE.Vector3();
+      const worldNormal = this.impactNormal.copy(normal).transformDirection(object.matrixWorld);
       const dummy = this.bulletHoleDummy;
       dummy.position.copy(point).addScaledVector(worldNormal, 0.008);
       dummy.quaternion.setFromUnitVectors(this.scratch.g.set(0, 0, 1), worldNormal);
@@ -8986,11 +9041,61 @@ export class TacticalGame {
     const nextX = position.x + dx;
     const nextZ = position.z + dz;
     if (Math.abs(nextX) > 31.9 || Math.abs(nextZ) > 37.9) return;
-    for (const box of this.colliders) {
-      if (nextX + radius > box.minX && nextX - radius < box.maxX && nextZ + radius > box.minZ && nextZ - radius < box.maxZ) return;
-    }
+    if (this.hasCollision(nextX - radius, nextX + radius, nextZ - radius, nextZ + radius)) return;
     position.x = nextX;
     position.z = nextZ;
+  }
+
+  // 碰撞体在场景构建完成后不再变化，用均匀网格把逐帧全量遍历降为邻域查询
+  buildColliderGrid() {
+    const cell = 4;
+    const originX = -32;
+    const originZ = -38;
+    const cols = 16;
+    const rows = 19;
+    const cells = new Array(cols * rows);
+    for (let i = 0; i < cells.length; i++) cells[i] = [];
+    this.colliders.forEach((box, index) => {
+      const cx0 = clamp(Math.floor((box.minX - originX) / cell), 0, cols - 1);
+      const cx1 = clamp(Math.floor((box.maxX - originX) / cell), 0, cols - 1);
+      const cz0 = clamp(Math.floor((box.minZ - originZ) / cell), 0, rows - 1);
+      const cz1 = clamp(Math.floor((box.maxZ - originZ) / cell), 0, rows - 1);
+      for (let cz = cz0; cz <= cz1; cz++) {
+        for (let cx = cx0; cx <= cx1; cx++) cells[cz * cols + cx].push(index);
+      }
+    });
+    this.colliderGrid = { cell, originX, originZ, cols, rows, cells };
+    this.colliderStamp = new Int32Array(this.colliders.length);
+    this.colliderStampId = 0;
+  }
+
+  hasCollision(minX, maxX, minZ, maxZ) {
+    const grid = this.colliderGrid;
+    if (!grid) {
+      return this.colliders.some((box) => (
+        maxX > box.minX && minX < box.maxX && maxZ > box.minZ && minZ < box.maxZ
+      ));
+    }
+    const { cell, originX, originZ, cols, rows, cells } = grid;
+    const cx0 = clamp(Math.floor((minX - originX) / cell), 0, cols - 1);
+    const cx1 = clamp(Math.floor((maxX - originX) / cell), 0, cols - 1);
+    const cz0 = clamp(Math.floor((minZ - originZ) / cell), 0, rows - 1);
+    const cz1 = clamp(Math.floor((maxZ - originZ) / cell), 0, rows - 1);
+    const stamps = this.colliderStamp;
+    const stamp = ++this.colliderStampId;
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const bucket = cells[cz * cols + cx];
+        for (let i = 0; i < bucket.length; i++) {
+          const index = bucket[i];
+          if (stamps[index] === stamp) continue;
+          stamps[index] = stamp;
+          const box = this.colliders[index];
+          if (maxX > box.minX && minX < box.maxX && maxZ > box.minZ && minZ < box.maxZ) return true;
+        }
+      }
+    }
+    return false;
   }
 
   resetWeaponHeat() {
@@ -9195,12 +9300,8 @@ export class TacticalGame {
       const pz = this.player.position.z;
       let nearWall = Math.abs(px) > 30.8 || Math.abs(pz) > 36.8;
       if (!nearWall) {
-        for (const box of this.colliders) {
-          if (px > box.minX - 1 && px < box.maxX + 1 && pz > box.minZ - 1 && pz < box.maxZ + 1) {
-            nearWall = true;
-            break;
-          }
-        }
+        // 网格邻域查询取代全量碰撞体遍历
+        nearWall = this.hasCollision(px - 1, px + 1, pz - 1, pz + 1);
       }
       if (nearWall) {
         this.camera.getWorldDirection(this.scratch.h);
@@ -9484,12 +9585,28 @@ export class TacticalGame {
   }
 
   pickPatrolPoint(enemy) {
-    const options = PATROL_POINTS.filter(([x, z]) => (
-      Math.hypot(x - enemy.group.position.x, z - enemy.group.position.z) > 5
-    ));
-    const pool = options.length ? options : PATROL_POINTS;
-    const [x, z] = pool[Math.floor(Math.random() * pool.length)];
-    return new THREE.Vector3(x, 0, z);
+    // 只统计满足距离条件的巡逻点，避免 filter + hypot + 新向量带来的临时分配
+    const position = enemy.group.position;
+    let count = 0;
+    for (const [x, z] of PATROL_POINTS) {
+      const dx = x - position.x;
+      const dz = z - position.z;
+      if (dx * dx + dz * dz > 25) count++;
+    }
+    let x = 0;
+    let z = 0;
+    if (count) {
+      let index = Math.floor(Math.random() * count);
+      for (const [px, pz] of PATROL_POINTS) {
+        const dx = px - position.x;
+        const dz = pz - position.z;
+        if (dx * dx + dz * dz <= 25) continue;
+        if (index-- === 0) { x = px; z = pz; break; }
+      }
+    } else {
+      [x, z] = PATROL_POINTS[Math.floor(Math.random() * PATROL_POINTS.length)];
+    }
+    return (enemy.patrolTarget || (enemy.patrolTarget = new THREE.Vector3())).set(x, 0, z);
   }
 
   updateEnemies(dt) {
@@ -9736,11 +9853,18 @@ export class TacticalGame {
 
   updateObjective(dt) {
     this.plantingActive = false;
+    // 交互提示节点与进度条按需更新，避免贴近核心时每帧写 DOM
+    if (!this.plantUI) {
+      this.plantUI = {
+        wrap: $('interaction'), fill: $('interaction-progress'), text: $('interaction-text'), percent: -1,
+      };
+    }
+    const plantUI = this.plantUI;
     const distance = this.player.position.distanceTo(this.site);
     if (!this.bombPlanted) {
       const canPlant = distance < 4.25;
       if (canPlant !== this.interactionVisible) {
-        $('interaction').classList.toggle('hidden', !canPlant);
+        plantUI.wrap.classList.toggle('hidden', !canPlant);
         this.interactionVisible = canPlant;
       }
       if (canPlant) {
@@ -9752,10 +9876,14 @@ export class TacticalGame {
           this.plantProgress = Math.max(0, this.plantProgress - dt * 1.5);
         }
         this.plantingActive = !this.player.dead && interactHeld && this.plantProgress > 0.02;
-        $('interaction-progress').style.width = `${clamp(this.plantProgress / 3, 0, 1) * 100}%`;
+        const percent = Math.round(clamp(this.plantProgress / 3, 0, 1) * 100);
+        if (percent !== plantUI.percent) {
+          plantUI.percent = percent;
+          plantUI.fill.style.width = `${percent}%`;
+        }
         const planting = interactHeld;
         if (planting !== this.plantingHeld) {
-          $('interaction-text').textContent = planting ? '正在安置量子核心…' : '按住安置量子核心';
+          plantUI.text.textContent = planting ? '正在安置量子核心…' : '按住安置量子核心';
           this.plantingHeld = planting;
         }
         if (this.plantProgress >= 3) this.plantBomb();
@@ -9763,7 +9891,11 @@ export class TacticalGame {
         this.plantProgress = 0;
         if (this.plantingHeld) {
           this.plantingHeld = false;
-          $('interaction-text').textContent = '按住安置量子核心';
+          plantUI.text.textContent = '按住安置量子核心';
+        }
+        if (plantUI.percent !== 0) {
+          plantUI.percent = 0;
+          plantUI.fill.style.width = '0%';
         }
       }
     } else {
@@ -9874,7 +10006,9 @@ export class TacticalGame {
             effect.object.material?.dispose();
           }
         }
-        this.effects.splice(i, 1);
+        // 倒序遍历时用尾部交换代替 splice，避免每次移除都搬移整个数组
+        const last = this.effects.pop();
+        if (i < this.effects.length) this.effects[i] = last;
       }
     }
     this.updateCasings(dt);
@@ -10239,15 +10373,21 @@ export class TacticalGame {
       this.minimapCone = this.minimapCtx.createRadialGradient(0, 0, 3, 0, 0, 46);
       this.minimapCone.addColorStop(0, 'rgba(200,255,82,.26)');
       this.minimapCone.addColorStop(1, 'rgba(200,255,82,0)');
+      // 玩家光点改用缓存的径向渐变，避免每帧 canvas shadowBlur 的软件模糊开销
+      this.minimapGlow = this.minimapCtx.createRadialGradient(0, 0, 2, 0, 0, 13);
+      this.minimapGlow.addColorStop(0, 'rgba(200,255,82,.5)');
+      this.minimapGlow.addColorStop(1, 'rgba(200,255,82,0)');
+      this.minimapScaleX = this.minimapCanvas.width / 66;
+      this.minimapScaleY = this.minimapCanvas.height / 78;
       this.minimapDirection = new THREE.Vector3();
     }
     const canvas = this.minimapCanvas;
     const ctx = this.minimapCtx;
-    const width = canvas.width;
-    const height = canvas.height;
-    const mapX = (x) => ((x + 33) / 66) * width;
-    const mapY = (z) => ((z + 39) / 78) * height;
-    ctx.clearRect(0, 0, width, height);
+    const scaleX = this.minimapScaleX;
+    const scaleY = this.minimapScaleY;
+    const mapX = (x) => (x + 33) * scaleX;
+    const mapY = (z) => (z + 39) * scaleY;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(this.minimapBase, 0, 0);
     ctx.strokeStyle = '#c8ff52';
     ctx.lineWidth = 1.5;
@@ -10259,7 +10399,7 @@ export class TacticalGame {
       ctx.fillStyle = '#ff5d52';
       ctx.beginPath(); ctx.arc(mapX(enemy.group.position.x), mapY(enemy.group.position.z), 3, 0, Math.PI * 2); ctx.fill();
     });
-    const pickupColors = { medkit: '#7dff9a', armor: '#6ec8ff', ammo: '#ffc24a', grenade: '#ff9a4a' };
+    const pickupColors = MINIMAP_PICKUP_COLORS;
     this.pickups.forEach((pickup) => {
       if (!pickup.active) return;
       ctx.fillStyle = pickupColors[pickup.type] || '#c8ff52';
@@ -10287,8 +10427,9 @@ export class TacticalGame {
     ctx.restore();
     ctx.save();
     ctx.translate(px, py); ctx.rotate(angle);
+    ctx.fillStyle = this.minimapGlow;
+    ctx.beginPath(); ctx.arc(0, 0, 13, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#c8ff52';
-    ctx.shadowColor = '#c8ff52'; ctx.shadowBlur = 8;
     ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(5, 6); ctx.lineTo(0, 3); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill();
     ctx.restore();
     ctx.strokeStyle = 'rgba(200,255,82,.35)'; ctx.beginPath(); ctx.arc(px, py, 11, 0, Math.PI * 2); ctx.stroke();
