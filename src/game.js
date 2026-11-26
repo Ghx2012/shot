@@ -5892,6 +5892,27 @@ export class TacticalGame {
       }
     }
     if (this.laneSpot) this.laneSpot.castShadow = !lowQuality;
+    // 各向异性过滤主要作用于地面等斜视角大面积采样，按画质下调可降低纹理采样开销
+    const anisotropy = lowQuality ? 2 : this.quality === 'medium' ? 4 : 8;
+    if (this.textureAnisotropy !== anisotropy) {
+      this.textureAnisotropy = anisotropy;
+      const seenTextures = new Set();
+      const textureKeys = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'bumpMap', 'alphaMap', 'aoMap'];
+      this.scene.traverse((object) => {
+        if (!object.isMesh && !object.isSkinnedMesh) return;
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of materials) {
+          if (!material) continue;
+          for (const key of textureKeys) {
+            const texture = material[key];
+            if (!texture || seenTextures.has(texture) || texture.anisotropy === anisotropy) continue;
+            seenTextures.add(texture);
+            texture.anisotropy = anisotropy;
+            texture.needsUpdate = true;
+          }
+        }
+      });
+    }
     this.qualityTimer = 0;
     this.frameTimeAccum = 0;
     this.frameTimeCount = 0;
@@ -10323,8 +10344,21 @@ export class TacticalGame {
   }
 
   updateScoreUI() {
-    $('friendly-score').textContent = this.score.friendly;
-    $('enemy-score').textContent = this.score.enemy;
+    const friendly = this.score.friendly;
+    const enemy = this.score.enemy;
+    if (!this.scoreUI) {
+      this.scoreUI = { friendlyEl: $('friendly-score'), enemyEl: $('enemy-score'), friendly: -1, enemy: -1 };
+    }
+    const ui = this.scoreUI;
+    // 在线模式每个快照都会调用，比分未变时跳过 DOM 写入
+    if (friendly !== ui.friendly) {
+      ui.friendly = friendly;
+      if (ui.friendlyEl) ui.friendlyEl.textContent = friendly;
+    }
+    if (enemy !== ui.enemy) {
+      ui.enemy = enemy;
+      if (ui.enemyEl) ui.enemyEl.textContent = enemy;
+    }
   }
 
   updateEnemyPips() {
@@ -10513,7 +10547,8 @@ export class TacticalGame {
     if (!(this.loginScreen || (this.loginScreen = $('login-screen'))).classList.contains('hidden')) return;
     if (this.state !== 'playing') {
       this.idleFrameAccum += rawDt;
-      const idleInterval = this.touchMode ? 1 / 20 : 1 / 30;
+      // 暂停时画面基本静止，降帧渲染进一步省电
+      const idleInterval = this.state === 'paused' ? 1 / 15 : this.touchMode ? 1 / 20 : 1 / 30;
       if (this.idleFrameAccum < idleInterval) return;
       this.idleFrameAccum = 0;
     } else {
