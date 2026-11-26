@@ -2705,7 +2705,6 @@ export class TacticalGame {
       if (object.matrixAutoUpdate !== false) return;
       // 只合并叶子网格，避免移除父级时带走未参与合批的灯光或动态子对象
       if (object.children.length) return;
-      if (solidSet.has(object)) return;
       if (!object.geometry || Object.keys(object.geometry.morphAttributes || {}).length) return;
       if (!object.material || Array.isArray(object.material)) return;
       if (object.material.transparent || object.material.depthWrite === false) return;
@@ -2748,7 +2747,14 @@ export class TacticalGame {
       removeList.push(...batch);
     }
     for (const mesh of removeList) {
-      if (mesh.parent) mesh.parent.remove(mesh);
+      if (!mesh.parent) continue;
+      if (solidSet.has(mesh)) {
+        // 碰撞体仍需参与射线检测（弹孔、视线、地面投影），隐藏渲染但保留在场景中
+        mesh.visible = false;
+        mesh.castShadow = false;
+      } else {
+        mesh.parent.remove(mesh);
+      }
     }
   }
 
