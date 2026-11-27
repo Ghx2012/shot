@@ -5878,6 +5878,8 @@ export class TacticalGame {
     if (this.smaaPass) this.smaaPass.enabled = this.quality !== 'low';
     this.usePost = this.quality !== 'low';
     const lowQuality = this.quality === 'low';
+    // 低画质下关闭菜单/触控层的背景模糊，避免覆盖 3D 画布时的全屏合成开销
+    if (document.body) document.body.classList.toggle('low-quality', lowQuality);
     // 流畅模式改用更便宜的软阴影采样算法，弱机型阴影开销明显下降
     const shadowType = lowQuality ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     if (this.renderer.shadowMap.type !== shadowType) {
@@ -10591,10 +10593,10 @@ export class TacticalGame {
     if (document.hidden) return;
     // 登录页覆盖全屏时暂停 3D 渲染，减少手机发热与耗电
     if (!(this.loginScreen || (this.loginScreen = $('login-screen'))).classList.contains('hidden')) return;
-    // 暂停时画面基本静止，降帧渲染进一步省电
+    // 暂停时画面静止，降到 1fps 维持画面新鲜度，避免菜单全屏模糊下的无意义渲染
     if (this.state !== 'playing') {
       this.idleFrameAccum += rawDt;
-      const idleInterval = this.state === 'paused' ? 1 / 15
+      const idleInterval = this.state === 'paused' ? 1
         : this.touchMode ? 1 / 20 : 1 / 30;
       if (this.idleFrameAccum < idleInterval) return;
       this.idleFrameAccum = 0;
