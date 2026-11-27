@@ -422,6 +422,8 @@ export class TacticalGame {
     this.colliders = [];
     this.enemies = [];
     this.effects = [];
+    // 特效描述符池，避免每次开枪/命中都新建临时对象
+    this.effectPool = [];
     this.casings = [];
     this.casingRaycaster = null;
     this.casingBrassMat = null;
@@ -8777,6 +8779,18 @@ export class TacticalGame {
     return this.tracerPool;
   }
 
+  // 从池中取出（或新建）特效描述符，持续射击时不再产生短命对象
+  pushEffect(object, life, type, size = 0) {
+    const entry = this.effectPool.pop() || { object: null, life: 0, maxLife: 0, type: '', size: 0, pooled: true };
+    entry.object = object;
+    entry.life = life;
+    entry.maxLife = life;
+    entry.type = type;
+    entry.size = size;
+    entry.pooled = true;
+    this.effects.push(entry);
+  }
+
   createTracer(start, end, color, life = 0.08) {
     this.ensureTracerPool();
     const line = this.tracerPool.find((item) => !item.visible) || this.tracerPool[0];
@@ -8787,9 +8801,8 @@ export class TacticalGame {
     line.material.color.setHex(color);
     line.material.opacity = 0.85;
     line.visible = true;
-    this.effects.push({ object: line, life, maxLife: life, type: 'fade', pooled: true });
+    this.pushEffect(line, life, 'fade');
   }
-
   ensureBulletHoles() {
     if (this.bulletHoleMesh) return;
     this.bulletHoleMesh = new THREE.InstancedMesh(this.bulletHoleGeometry, this.bulletHoleMaterial, 45);
@@ -8848,7 +8861,7 @@ export class TacticalGame {
     sprite.material.opacity = 0.9;
     sprite.scale.setScalar(size * 1.3);
     sprite.visible = true;
-    this.effects.push({ object: sprite, life, maxLife: life, size, type: 'flash', pooled: true });
+    this.pushEffect(sprite, life, 'flash', size);
   }
 
   resetMotionState() {
@@ -9645,8 +9658,8 @@ export class TacticalGame {
     const side = this.scratch.e;
     const separation = this.scratch.f;
     for (const enemy of this.enemies) {
-      if (enemy.mixer) enemy.mixer.update(dt);
       if (!enemy.alive) {
+        if (enemy.mixer) enemy.mixer.update(dt);
         const t = clamp((this.time - enemy.deathTime) * 2.4, 0, 1);
         enemy.group.rotation.z = lerp(enemy.group.rotation.z, enemy.fallDirection * 1.45, t * 0.12);
         enemy.group.position.y = lerp(enemy.group.position.y, -0.25, t * 0.08);
@@ -9656,9 +9669,28 @@ export class TacticalGame {
       toPlayer.subVectors(this.player.position, enemy.group.position);
       toPlayer.y = 0;
       const distance = toPlayer.length();
+      // 远处敌人动画降到约 20Hz，近处保持满帧，减少骨骼矩阵计算
+      if (enemy.mixer) {
+        if (distance > 25) {
+          enemy.animAccum = (enemy.animAccum || 0) + dt;
+          if (enemy.animAccum >= 0.05) {
+            enemy.mixer.update(enemy.animAccum);
+            enemy.animAccum = 0;
+          }
+        } else {
+          if (enemy.animAccum) {
+            enemy.mixer.update(enemy.animAccum);
+            enemy.animAccum = 0;
+          }
+          enemy.mixer.update(dt);
+        }
+      }
       enemy.senseTimer -= dt;
       if (enemy.senseTimer <= 0) {
-        enemy.senseTimer = 0.12 + Math.random() * 0.08;
+        // 距离越远感知频率越低：远端射线检测对行为影响很小
+        enemy.senseTimer = distance > 22
+          ? 0.22 + Math.random() * 0.12
+          : 0.1 + Math.random() * 0.06;
         // 超出感知距离直接判为不可见，省掉一次全场景射线
         if (distance >= 36) {
           enemy.canSee = false;
@@ -10036,6 +10068,7 @@ export class TacticalGame {
         // 倒序遍历时用尾部交换代替 splice，避免每次移除都搬移整个数组
         const last = this.effects.pop();
         if (i < this.effects.length) this.effects[i] = last;
+        if (effect.pooled && this.effectPool.length < 64) this.effectPool.push(effect);
       }
     }
     this.updateCasings(dt);
@@ -10142,6 +10175,7 @@ export class TacticalGame {
     for (const effect of this.effects) {
       if (effect.pooled) {
         effect.object.visible = false;
+        if (this.effectPool.length < 64) this.effectPool.push(effect);
         continue;
       }
       this.scene.remove(effect.object);
@@ -10324,27 +10358,33 @@ export class TacticalGame {
   }
 
   updateVitalsUI() {
-    if (!this.vitalsUI) this.vitalsUI = { health: -1, armor: -1, low: null, lowClass: null };
+    if (!this.vitalsUI) {
+      this.vitalsUI = {
+        healthEl: $('health-value'), barEl: $('health-bar'), armorEl: $('armor-value'),
+        vignetteEl: $('damage-vignette'),
+        health: -1, armor: -1, low: null, lowClass: null,
+      };
+    }
     const ui = this.vitalsUI;
     const health = Math.ceil(this.player.health);
     const armor = Math.ceil(this.player.armor);
     if (health !== ui.health) {
-      $('health-value').textContent = health;
-      $('health-bar').style.width = `${health}%`;
+      if (ui.healthEl) ui.healthEl.textContent = health;
+      if (ui.barEl) ui.barEl.style.width = `${health}%`;
       ui.health = health;
     }
     if (armor !== ui.armor) {
-      $('armor-value').textContent = armor;
+      if (ui.armorEl) ui.armorEl.textContent = armor;
       ui.armor = armor;
     }
     const low = this.player.health < 30;
     if (low !== ui.low) {
-      $('health-bar').style.background = low ? '#ff5d52' : '';
+      if (ui.barEl) ui.barEl.style.background = low ? '#ff5d52' : '';
       ui.low = low;
     }
     const lowClass = !this.player.dead && this.player.health > 0 && this.player.health < 30;
     if (lowClass !== ui.lowClass) {
-      $('damage-vignette').classList.toggle('low-health', lowClass);
+      if (ui.vignetteEl) ui.vignetteEl.classList.toggle('low-health', lowClass);
       ui.lowClass = lowClass;
     }
   }
@@ -10551,10 +10591,11 @@ export class TacticalGame {
     if (document.hidden) return;
     // 登录页覆盖全屏时暂停 3D 渲染，减少手机发热与耗电
     if (!(this.loginScreen || (this.loginScreen = $('login-screen'))).classList.contains('hidden')) return;
+    // 暂停时画面基本静止，降帧渲染进一步省电
     if (this.state !== 'playing') {
       this.idleFrameAccum += rawDt;
-      // 暂停时画面基本静止，降帧渲染进一步省电
-      const idleInterval = this.state === 'paused' ? 1 / 15 : this.touchMode ? 1 / 20 : 1 / 30;
+      const idleInterval = this.state === 'paused' ? 1 / 15
+        : this.touchMode ? 1 / 20 : 1 / 30;
       if (this.idleFrameAccum < idleInterval) return;
       this.idleFrameAccum = 0;
     } else {
